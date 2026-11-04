@@ -1,0 +1,133 @@
+# Treasure Hunt Map
+
+A single-page React app (Vite + TypeScript, no backend) for tracking a treasure hunt on the game's world map.
+Everything is saved in your browser's `localStorage`. Export and import JSON files for backups and sharing.
+
+- **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` with tiles half as tall as they are wide, so the map looks square like in the game.
+- **Zones**: 73 level areas (L1–L5) plus the King's Throne, converted from the zone map image.
+- **Marks**: T (treasure found), R (reward / collected), D (dug, nothing), S (suspected), each with an optional note.
+- **Landmarks**: name, type, optional level, position and size, drawn on the map. Types, their colours and their icons (crown, ruin, castle, flag, star, gem, chest, dot) can be edited.
+- **Pins when zoomed out**:
+  - When tiles get too small to read, Treasure (chest icon) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
+  - Landmarks get bigger pins with their type's icon and their name.
+  - Turn pins on or off under *Display & filters*.
+- **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
+- **Lists and stats**: mark counts per zone level, plus clickable lists of T / S / R tiles.
+- **Undo/redo**, filters, dim unmarked tiles, and a dark UI by default (follows the system light/dark setting).
+- **Responsive layout**: a side panel on desktop (narrower on tablets), and an expandable bottom sheet under the map on phones.
+
+## Run locally
+
+Requires Node.js 18+.
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+## Build
+
+```bash
+npm run build      # type-checks, then writes static files to dist/
+npm run preview    # serves dist/ locally to check the build
+```
+
+The build is fully static, and `base: './'` makes it work from any sub-path.
+
+## Deploy
+
+### GitHub Pages
+
+1. Push this project to a GitHub repository (branch `main`).
+2. In the repository, open **Settings → Pages** and set **Source** to **GitHub Actions**.
+3. The included workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) builds and deploys on every push to `main`, or you can run it from the **Actions** tab.
+4. The site will be at `https://<user>.github.io/<repo>/`.
+
+### Netlify
+
+- **Git-based:** "Add new site → Import an existing project", then pick the repository. [`netlify.toml`](netlify.toml) already sets `npm run build` and the `dist` folder.
+- **Drag and drop:** run `npm run build` and drop the `dist/` folder on <https://app.netlify.com/drop>.
+
+> Saved data lives in each visitor's own browser, per site address. Moving to a new URL starts with an empty map, so export first and import at the new address.
+
+## Side panel
+
+The panel has five tabs, each split into groups:
+
+| Tab | What's in it |
+| --- | --- |
+| **Tile** | Go to X:Y; the selected tile (mark, note, zone, nearest landmark, distance and offset, **Copy** X:Y); recent jumps |
+| **Marks** | Marked-tile browser for one code at a time, with a zone filter, note search, sorting by position or by distance from the selected tile, and **Copy list** (paste it into game chat); **Paste coordinates** to mark a whole list in one step; progress by zone |
+| **Landmarks** | Search, filter by type, sort by name or by distance from the selected tile; add, edit and delete; landmark types (colour, icon, name) |
+| **Map** | Zones, pins, dimming and which mark codes to show; legend |
+| **More** | Export and import (backup and sharing); how to use |
+
+## Using the map
+
+| Action | Mouse | Touch |
+| --- | --- | --- |
+| Select a tile (opens its card) | click or right-click; click again to deselect | tap; tap again to deselect |
+| Mark the selected tile | card buttons, or keys `1` `2` `3` (T/D/S) and `0`/`Delete` to clear | card buttons |
+| Paint with a brush (pick T/D/S/eraser in the toolbar) | click / drag; size 1/3/5/9 or **Box** (drag a rectangle) in the banner | tap / drag |
+| Erase while a brush is active | right-drag | pick the eraser |
+| Pan | drag (Select tool), or middle-drag / Space+drag with a brush | one-finger drag (Select tool), two fingers |
+| Zoom | wheel or double-click (Shift+wheel pans sideways) | pinch or double-tap |
+| Tile info | hover | tap |
+
+Clicking a tile only selects it and never changes its mark. With a tile selected:
+
+- The arrow keys move the selection (`Shift` moves 10 tiles).
+- `N` / `Shift+N` (or the ‹ › buttons in the card) step through the tiles with the same mark, for example every Suspected tile in turn.
+- `Esc` closes the card.
+
+The **Go to X:Y** box in the toolbar jumps to a tile even when the side panel is closed. Every change shows a toast with **Undo**. While a brush is active, a banner on the map shows which one, with a **Done** button.
+
+Keyboard: `V` select tool, `T` `R` `D` `S` brushes, `E` eraser, `Esc` back to Select (or close the card), `F` fit map, `Z` zones on/off, `P` side panel, `+`/`-` zoom, `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`) undo/redo.
+
+Selecting a tile (by clicking it, using **Go**, or picking one from a list) shows its mark, note, zone level, nearest landmark, distance and offset in the Finder. Typing or pasting `123:456` (or `123 456`, `123,456`) into either coordinate box fills both. Coordinates outside 3–509 / 3–1021 are rejected.
+
+## Data
+
+### Export format
+
+```json
+{
+  "app": "treasure-hunt-map",
+  "version": 1,
+  "marks": [{ "x": 120, "y": 300, "code": "T", "note": "chest" }],
+  "landmarks": [{ "id": "…", "name": "Ruin Alpha", "typeId": "ruin", "level": 4, "x": 300, "y": 600, "size": 3, "notes": "" }],
+  "landmarkTypes": [{ "id": "ruin", "name": "Ruin", "color": "#C65911" }]
+}
+```
+
+Import offers two modes:
+
+- **Merge** adds the file's marks and landmarks to yours. Marks overwrite tiles, and landmarks with the same `id` are replaced.
+- **Replace** swaps out all your data.
+
+Both can be undone. Entries with invalid coordinates (below 3 or beyond the map), unknown codes, or bad sizes are skipped and listed.
+
+### Internals
+
+- Marks are a `Uint8Array(507 × 1019)` (0 = none, 1 = T, 2 = R, 3 = D, 4 = S) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
+- `localStorage` stores the marks run-length encoded under the key `treasure-map:v1`. Saves are debounced and also flushed when the page is hidden.
+- Rendering: the zone colours, zone borders and marks are cached in offscreen canvases, one pixel per tile. Each frame blits only the visible region, and adds grid lines, letters, vector borders and landmarks on top for the visible tiles. A frame costs about 1–2 ms, even with tens of thousands of marks.
+
+## Regenerating the zone grid
+
+The zone grid ships as [`src/data/zones.json`](src/data/zones.json): run-length-encoded area ids, a level for each area, and label positions. To rebuild it from the image:
+
+```bash
+npm run zones
+# same as: node scripts/build-zones.mjs scripts/zones-source.jpg src/data/zones.json
+```
+
+[`scripts/build-zones.mjs`](scripts/build-zones.mjs):
+
+1. Crops off the grey frame.
+2. Splits the white areas between the border lines into connected regions.
+3. Gives each region a level from a list of seed points: the printed level labels plus one point inside the Throne.
+4. Grows the regions over the lines, digits and icons.
+5. Stretches the result linearly onto the 507 × 1019 grid, with the inner left/right edges at X 3/509 and top/bottom at Y 3/1021.
+
+It fails loudly if a region has no seed, if two seeds share a region, or if the counts per level aren't 24/18/16/10/5 plus the Throne. If you swap in a different image, update the `SEEDS` list at the top of the script.
