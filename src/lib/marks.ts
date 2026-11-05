@@ -21,6 +21,10 @@ export const MARK_CODES: MarkCode[] = [1, 5, 4, 3]; // display order: T, C, S, D
 /** Codes shown as pins when zoomed out, in priority order (D gets none). */
 export const PIN_CODES: number[] = [1, 5, 4];
 
+/** Codes that get a range square drawn around them (when enabled), and its half-size: 39×39 tiles. */
+export const RANGE_CODES: number[] = [1, 5];
+export const RANGE_RADIUS = 19;
+
 export function isActiveMark(code: number): boolean {
   return MARK_CODES.includes(code as MarkCode);
 }

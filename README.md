@@ -11,6 +11,7 @@ Everything is saved in your browser's `localStorage`. Export and import JSON fil
   - When tiles get too small to read, Treasure (chest icon), Scrap (gear) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
   - Landmarks get bigger pins with their type's icon and their name.
   - Turn pins on or off under *Display & filters*.
+- **Treasure & scrap areas**: an optional 39×39-tile square centred on every T and C tile (an indicator only). Turn it on or off in the **Map** tab.
 - **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
 - **Lists and stats**: mark counts per zone level, plus clickable lists of marked tiles.
 - **Undo/redo**, filters, dim unmarked tiles, and a dark UI by default (follows the system light/dark setting).
@@ -59,7 +60,7 @@ The panel has five tabs, each split into groups:
 | **Tile** | Go to X:Y; the selected tile (mark, note, zone, nearest landmark, distance and offset, **Copy** X:Y); recent jumps |
 | **Marks** | Marked-tile browser for one code at a time, with a zone filter, note search, sorting by position or by distance from the selected tile, and **Copy list** (paste it into game chat); **Paste coordinates** to mark a whole list in one step; progress by zone |
 | **Landmarks** | Search, filter by type, sort by name or by distance from the selected tile; add, edit and delete; landmark types (colour, icon, name) |
-| **Map** | Zones, pins, dimming and which mark codes to show; legend |
+| **Map** | Zones, pins, treasure & scrap areas (39×39), dimming and which mark codes to show; legend |
 | **More** | Export and import (backup and sharing); how to use |
 
 ## Using the map

@@ -1,12 +1,12 @@
 import { MARK_ICONS } from '../lib/icons';
 import { PinGlyph } from './PinGlyph';
-import { CODE_SLOTS, MARKS, MARK_CODES, PIN_CODES } from '../lib/marks';
+import { CODE_SLOTS, MARKS, MARK_CODES, PIN_CODES, RANGE_CODES } from '../lib/marks';
 import { useStore } from '../lib/useStore';
 import { LEVELS, LEVEL_COLORS, levelName, tilesPerLevel } from '../lib/zones';
 
 export function DisplayOptions() {
   const store = useStore();
-  const { showZones, showPins, showCodes, dimUnmarked } = store.settings;
+  const { showZones, showPins, showRanges, showCodes, dimUnmarked } = store.settings;
   return (
     <div className="options">
       <label className="check">
@@ -18,6 +18,15 @@ export function DisplayOptions() {
         Pins when zoomed out
         <span className="pin-legend">
           {PIN_CODES.map((c) => (
+            <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={MARKS[c].name} />
+          ))}
+        </span>
+      </label>
+      <label className="check" title="Show the 39×39 area around each treasure and scrap tile, centred on it">
+        <input type="checkbox" checked={showRanges} onChange={(e) => store.setSettings({ showRanges: e.target.checked })} />
+        Treasure &amp; scrap areas (39×39)
+        <span className="pin-legend">
+          {RANGE_CODES.map((c) => (
             <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={MARKS[c].name} />
           ))}
         </span>

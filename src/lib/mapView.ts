@@ -1,6 +1,6 @@
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, toIndex } from './coords';
 import { MARK_ICONS, PinIcon, drawIcon, readableOn } from './icons';
-import { CODE_SLOTS, MARKS, PIN_CODES, isActiveMark } from './marks';
+import { CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, RANGE_RADIUS, isActiveMark } from './marks';
 import { typeIcon, type Store, type StoreEvent } from './store';
 import { LEVEL_COLORS, areaLabels, zoneArea, zoneLevel } from './zones';
 
@@ -735,6 +735,7 @@ export class MapView {
         ctx.fillRect(vx, vy, vw, vh);
       }
 
+      if (settings.showRanges) this.drawRanges(c0, c1, r0, r1);
       this.drawCrosshair(c0, c1, r0, r1);
       this.drawLandmarks(false);
 
@@ -903,6 +904,33 @@ export class MapView {
     ctx.strokeStyle = 'rgba(0,0,0,0.16)';
     ctx.lineWidth = 1;
     ctx.stroke();
+  }
+
+  /** 39×39 square centred on each treasure / scrap tile, clipped to the map. */
+  private drawRanges(c0: number, c1: number, r0: number, r1: number) {
+    const { ctx, scale, ox, oy, store } = this;
+    const th = scale / 2;
+    const show = store.settings.showCodes;
+    ctx.lineWidth = 1.5;
+    for (const i of store.marked) {
+      const m = store.marks[i];
+      if (!RANGE_CODES.includes(m) || !show[m]) continue;
+      const c = i % COLS;
+      const r = (i - c) / COLS;
+      const a0 = Math.max(0, c - RANGE_RADIUS);
+      const a1 = Math.min(COLS, c + RANGE_RADIUS + 1);
+      const b0 = Math.max(0, r - RANGE_RADIUS);
+      const b1 = Math.min(ROWS, r + RANGE_RADIUS + 1);
+      if (a1 <= c0 || a0 >= c1 || b1 <= r0 || b0 >= r1) continue;
+      const x = ox + a0 * scale;
+      const y = oy + b0 * th;
+      const w = (a1 - a0) * scale;
+      const h = (b1 - b0) * th;
+      ctx.fillStyle = MARKS[m].color + '24';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = MARKS[m].color + 'd0';
+      ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
+    }
   }
 
   private drawLetters(c0: number, c1: number, r0: number, r1: number) {

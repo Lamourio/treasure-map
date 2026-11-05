@@ -27,6 +27,7 @@ export type Tool = 'select' | MarkCode;
 export interface Settings {
   showZones: boolean;
   showPins: boolean; // pins + clusters for marks and landmarks when zoomed out
+  showRanges: boolean; // 39×39 square around each treasure and scrap tile
   brushSize: number; // brush radius in tiles: 0 = 1 tile, 1 = 3x3, 2 = 5x5, 4 = 9x9
   brushShape: 'brush' | 'box'; // freehand stamp, or drag a rectangle
   eraseCodes: boolean[]; // which mark codes the eraser removes (indexed by code)
@@ -127,6 +128,7 @@ function defaultSettings(): Settings {
   return {
     showZones: true,
     showPins: true,
+    showRanges: true,
     brushSize: 0,
     brushShape: 'brush',
     eraseCodes: new Array<boolean>(CODE_SLOTS).fill(true),
