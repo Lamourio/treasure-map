@@ -12,11 +12,35 @@ import { COLS, ROWS, TILE_COUNT } from './coords';
 /** Side of the iso grid (some cells are outside the map). */
 export const ISO_SIZE = COLS + (ROWS >> 1);
 
-/** Visible map rectangle in world units (the outer half-diamonds of the zigzag edges are cut off). */
-export const MAP_X0 = 0.5;
-export const MAP_X1 = COLS;
-export const MAP_Y0 = 0.25;
-export const MAP_Y1 = (ROWS - 1) / 2 + 0.25;
+/** Bounding box of the map in world units (edge tiles included whole). */
+export const MAP_X0 = 0;
+export const MAP_X1 = COLS + 0.5;
+export const MAP_Y0 = -0.25;
+export const MAP_Y1 = (ROWS - 1) / 2 + 0.75;
+
+let outline: Path2D | null = null;
+
+/** Zigzag outline of the map in world units, following the outer edges of the edge tiles. */
+export function mapOutline(): Path2D {
+  if (outline) return outline;
+  const p = new Path2D();
+  const last = ROWS - 1;
+  p.moveTo(0, centerY(0));
+  for (let c = 0; c < COLS; c++) {
+    p.lineTo(c + 0.5, centerY(0) - 0.5); // top vertices of the first row (not shifted)
+    p.lineTo(c + 1, centerY(0));
+  }
+  for (let r = 1; r <= last; r++) p.lineTo(r & 1 ? COLS + 0.5 : COLS, centerY(r)); // right vertices
+  const shift = (last & 1) * 0.5;
+  for (let c = COLS - 1; c >= 0; c--) {
+    p.lineTo(c + 0.5 + shift, centerY(last) + 0.5); // bottom vertices of the last row
+    p.lineTo(c + shift, centerY(last));
+  }
+  for (let r = last - 1; r >= 1; r--) p.lineTo(r & 1 ? 0.5 : 0, centerY(r)); // left vertices
+  p.closePath();
+  outline = p;
+  return p;
+}
 
 export function isoU(c: number, r: number): number {
   return c + ((r + 1) >> 1);

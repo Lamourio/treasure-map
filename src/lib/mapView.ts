@@ -11,6 +11,7 @@ import {
   centerY,
   diamondTiles,
   fromIso,
+  mapOutline,
   tileAtWorld,
   tileCenter,
   worldToIso,
@@ -414,7 +415,7 @@ export class MapView {
     if (sx < RULER_LEFT || sy < RULER_TOP) return -1;
     const wx = (sx - this.ox) / this.scale;
     const wy = (sy - this.oy) / this.scale;
-    if (wx < MAP_X0 || wx > MAP_X1 || wy < MAP_Y0 || wy > MAP_Y1) return -1;
+    if (wx < MAP_X0 || wx > MAP_X1 || wy < MAP_Y0 || wy > MAP_Y1) return -1; // tileAtWorld finds the exact diamond
     return tileAtWorld(wx, wy);
   }
 
@@ -790,15 +791,15 @@ export class MapView {
     ctx.clip();
 
     if (c0 < c1 && r0 < r1) {
-      // map layers, clipped to the map rectangle
+      // map layers, clipped to the map's zigzag outline (edge tiles stay whole)
       const mx = ox + MAP_X0 * scale;
       const my = oy + MAP_Y0 * scale;
       const mw = (MAP_X1 - MAP_X0) * scale;
       const mh = (MAP_Y1 - MAP_Y0) * scale;
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(mx, my, mw, mh);
-      ctx.clip();
+      ctx.setTransform(this.dpr * scale, 0, 0, this.dpr * scale, this.dpr * ox, this.dpr * oy);
+      ctx.clip(mapOutline());
+      this.resetTransform();
 
       ctx.imageSmoothingEnabled = false;
       if (settings.showZones) {
