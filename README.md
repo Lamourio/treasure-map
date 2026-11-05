@@ -3,7 +3,7 @@
 A single-page React app (Vite + TypeScript, no backend) for tracking a treasure hunt on the game's world map.
 Everything is saved in your browser's `localStorage`. Export and import JSON files for backups and sharing.
 
-- **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` with tiles half as tall as they are wide, so the map looks square like in the game.
+- **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` as **diamonds in staggered rows**, like in the game. Rows with an even Y sit half a tile to the right, so the lower-right neighbour of 100:200 is 101:201, and of 101:201 is 101:202. Rows are half a tile apart, so the map is square.
 - **Zones**: 73 level areas (L1–L5) plus the King's Throne, converted from the zone map image.
 - **Marks**: T (treasure found), C (scrap), S (suspected), D (dug, nothing), each with an optional note.
 - **Landmarks**: name, type, optional level, position and size, drawn on the map. Types, their colours and their icons (crown, ruin, castle, flag, star, gem, chest, dot) can be edited.
@@ -11,7 +11,7 @@ Everything is saved in your browser's `localStorage`. Export and import JSON fil
   - When tiles get too small to read, Treasure (chest icon), Scrap (gear) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
   - Landmarks get bigger pins with their type's icon and their name.
   - Turn pins on or off under *Display & filters*.
-- **Treasure & scrap areas**: an optional 39×39-tile square centred on every T and C tile (an indicator only). Turn it on or off in the **Map** tab.
+- **Treasure & scrap areas**: an optional 39×39-tile diamond centred on every T and C tile; overlapping areas merge into one outlined region (an indicator only). Turn it on or off in the **Map** tab.
 - **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
 - **Lists and stats**: mark counts per zone level, plus clickable lists of marked tiles.
 - **Undo/redo**, filters, dim unmarked tiles, and a dark UI by default (follows the system light/dark setting).
@@ -112,7 +112,7 @@ Both can be undone. Entries with invalid coordinates (below 3 or beyond the map)
 
 - Marks are a `Uint8Array(507 × 1019)` (0 = none, 1 = T, 2 = R (hidden for now), 3 = D, 4 = S, 5 = C) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
 - `localStorage` stores the marks run-length encoded under the key `treasure-map:v1`. Saves are debounced and also flushed when the page is hidden.
-- Rendering: the zone colours, zone borders and marks are cached in offscreen canvases, one pixel per tile. Each frame blits only the visible region, and adds grid lines, letters, vector borders and landmarks on top for the visible tiles. A frame costs about 1–2 ms, even with tens of thousands of marks.
+- Rendering ([`src/lib/grid.ts`](src/lib/grid.ts), [`src/lib/mapView.ts`](src/lib/mapView.ts)): turned by 45°, the staggered diamonds form a plain square grid. Zone colours, zone borders, marks and the treasure / scrap areas are cached in offscreen canvases in that grid, one pixel per tile, and drawn with a rotating transform, so each pixel lands on its diamond. Each frame draws only the visible part, plus grid lines, letters, vector borders and landmarks for the visible tiles. A frame costs a few milliseconds.
 
 ## Regenerating the zone grid
 

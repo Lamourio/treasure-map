@@ -196,7 +196,8 @@ const grid = new Uint8Array(COLS * ROWS);
 for (let r = 0; r < ROWS; r++) {
   const py = y0 + Math.min(ih - 1, Math.floor(((r + 0.5) / ROWS) * ih));
   for (let c = 0; c < COLS; c++) {
-    const px = x0 + Math.min(iw - 1, Math.floor(((c + 0.5) / COLS) * iw));
+    // tiles are diamonds in staggered rows: odd rows (even game Y) are shifted half a tile right
+    const px = x0 + Math.min(iw - 1, Math.floor(((c + 0.5 + (r & 1) * 0.5) / (COLS + 0.5)) * iw));
     grid[r * COLS + c] = area[py * W + px];
   }
 }

@@ -1,18 +1,34 @@
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, toIndex } from './coords';
+import {
+  ISO_SIZE,
+  ISO_TILE,
+  MAP_X0,
+  MAP_X1,
+  MAP_Y0,
+  MAP_Y1,
+  TILE_ISO,
+  centerX,
+  centerY,
+  diamondTiles,
+  fromIso,
+  tileAtWorld,
+  tileCenter,
+  worldToIso,
+} from './grid';
 import { MARK_ICONS, PinIcon, drawIcon, readableOn } from './icons';
 import { CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, RANGE_RADIUS, isActiveMark } from './marks';
 import { typeIcon, type Store, type StoreEvent } from './store';
 import { LEVEL_COLORS, areaLabels, zoneArea, zoneLevel } from './zones';
 
-// World units: 1 unit = one tile width. A tile is 1 wide and 0.5 tall, so the
-// 507 x 1019 grid is drawn as a square. screen = offset + world * scale.
+// World units: 1 unit = one tile width. Tiles are diamonds 1 wide and 1 tall in staggered rows
+// 0.5 apart (see grid.ts), so the 507 x 1019 grid is drawn as a square.
+// screen = offset + world * scale. Textures live in the 45°-turned "iso" grid, one pixel per tile.
 
 export const RULER_TOP = 22;
 export const RULER_LEFT = 38;
 
 const MAX_SCALE = 96; // max tile width in CSS px
-const FINE_BORDER_SCALE = 3.5; // use 4x2-texel border texture from here
-const VECTOR_BORDER_SCALE = 8; // draw borders as lines from here
+const VECTOR_BORDER_SCALE = 3.5; // draw borders as lines from here (below: darkened border tiles)
 const ZONE_LABEL_MAX_SCALE = 16;
 const GRID_SCALE = 12;
 const LETTER_SCALE = 22;
@@ -33,8 +49,8 @@ export interface HoverInfo {
 }
 
 interface Cluster {
-  c: number; // mean tile position
-  r: number;
+  x: number; // mean tile centre, world units
+  y: number;
   count: number;
   counts: number[]; // per mark code
   index: number; // the member tile when count === 1
@@ -91,6 +107,21 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
   return [c, c.getContext('2d')!];
 }
 
+/** Traces a diamond centred on (x, y) with half-width hw and half-height hh. */
+function diamondPath(ctx: CanvasRenderingContext2D, x: number, y: number, hw: number, hh: number) {
+  ctx.moveTo(x, y - hh);
+  ctx.lineTo(x + hw, y);
+  ctx.lineTo(x, y + hh);
+  ctx.lineTo(x - hw, y);
+  ctx.closePath();
+}
+
+function isoOf(i: number): [number, number] {
+  const p = TILE_ISO[i];
+  const u = p % ISO_SIZE;
+  return [u, (p - u) / ISO_SIZE];
+}
+
 function boxBounds(a: number, b: number) {
   const ac = a % COLS;
   const ar = (a - ac) / COLS;
@@ -110,8 +141,16 @@ export class MapView {
   private fitted = false;
 
   private zoneCanvas: HTMLCanvasElement;
-  private coarseBorder: HTMLCanvasElement;
-  private fineBorder: HTMLCanvasElement;
+  private borderCanvas: HTMLCanvasElement;
+  private rangeCanvas: HTMLCanvasElement;
+  private rangeCtx: CanvasRenderingContext2D;
+  private rangeImg: ImageData;
+  private rangeEdgeCanvas: HTMLCanvasElement;
+  private rangeEdgeCtx: CanvasRenderingContext2D;
+  private rangeEdgeImg: ImageData;
+  private rangeBits = new Uint8Array(ISO_SIZE * ISO_SIZE);
+  private rangeKey = '';
+  private rangeVersion = '';
   private marksCanvas: HTMLCanvasElement;
   private marksCtx: CanvasRenderingContext2D;
   private marksImg: ImageData;
@@ -151,14 +190,18 @@ export class MapView {
   ) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.zoneCanvas = this.buildZoneCanvas();
-    this.coarseBorder = this.buildBorderCanvas(1, 1);
-    this.fineBorder = this.buildBorderCanvas(4, 2);
-    [this.marksCanvas, this.marksCtx] = makeCanvas(COLS, ROWS);
-    this.marksImg = this.marksCtx.createImageData(COLS, ROWS);
+    this.borderCanvas = this.buildBorderCanvas();
+    [this.rangeCanvas, this.rangeCtx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    this.rangeImg = this.rangeCtx.createImageData(ISO_SIZE, ISO_SIZE);
+    [this.rangeEdgeCanvas, this.rangeEdgeCtx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    this.rangeEdgeImg = this.rangeEdgeCtx.createImageData(ISO_SIZE, ISO_SIZE);
+    [this.marksCanvas, this.marksCtx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    this.marksImg = this.marksCtx.createImageData(ISO_SIZE, ISO_SIZE);
     this.marksU32 = new Uint32Array(this.marksImg.data.buffer);
     this.markColors = Array.from({ length: CODE_SLOTS }, (_, c) => c).map((c) => (c ? packRgba(...hexToRgb(MARKS[c].color)) : 0));
     this.rebuildMarks();
     this.readTheme();
+    if (import.meta.env.DEV) (window as unknown as { mapView: MapView }).mapView = this; // for profiling in dev tools
 
     this.disposers.push(store.subscribe(this.onStore));
     this.listen(canvas, 'pointerdown', this.onPointerDown);
@@ -203,32 +246,35 @@ export class MapView {
   // ------------------------------------------------------------ layers
 
   private buildZoneCanvas(): HTMLCanvasElement {
-    const [c, ctx] = makeCanvas(COLS, ROWS);
-    const img = ctx.createImageData(COLS, ROWS);
+    const [c, ctx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    const img = ctx.createImageData(ISO_SIZE, ISO_SIZE);
     const u32 = new Uint32Array(img.data.buffer);
     const lut = [0, 1, 2, 3, 4, 5, 6].map((l) => (l ? packRgba(...hexToRgb(LEVEL_COLORS[l])) : 0));
-    for (let i = 0; i < TILE_COUNT; i++) u32[i] = lut[zoneLevel[i]];
+    for (let i = 0; i < TILE_COUNT; i++) u32[TILE_ISO[i]] = lut[zoneLevel[i]];
     ctx.putImageData(img, 0, 0);
     return c;
   }
 
-  /** Transparent texture with dark texels on tile edges where the area changes. */
-  private buildBorderCanvas(tx: number, ty: number): HTMLCanvasElement {
-    const W = COLS * tx;
-    const [c, ctx] = makeCanvas(W, ROWS * ty);
-    const img = ctx.createImageData(W, ROWS * ty);
+  /** Area of an iso cell, or -1 outside the map. */
+  private isoArea(u: number, v: number): number {
+    if (u < 0 || v < 0 || u >= ISO_SIZE || v >= ISO_SIZE) return -1;
+    const i = ISO_TILE[u + v * ISO_SIZE];
+    return i < 0 ? -1 : zoneArea[i];
+  }
+
+  /** Transparent iso texture with the tiles along area borders darkened (used when zoomed out). */
+  private buildBorderCanvas(): HTMLCanvasElement {
+    const [c, ctx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    const img = ctx.createImageData(ISO_SIZE, ISO_SIZE);
     const u32 = new Uint32Array(img.data.buffer);
     const px = packRgba(BORDER_RGBA[0], BORDER_RGBA[1], BORDER_RGBA[2], BORDER_RGBA[3]);
-    for (let r = 0; r < ROWS; r++) {
-      for (let col = 0; col < COLS; col++) {
-        const i = r * COLS + col;
-        const a = zoneArea[i];
-        if (col + 1 < COLS && zoneArea[i + 1] !== a) {
-          for (let y = 0; y < ty; y++) u32[(r * ty + y) * W + col * tx + tx - 1] = px;
-        }
-        if (r + 1 < ROWS && zoneArea[i + COLS] !== a) {
-          for (let x = 0; x < tx; x++) u32[(r * ty + ty - 1) * W + col * tx + x] = px;
-        }
+    for (let v = 0; v < ISO_SIZE; v++) {
+      for (let u = 0; u < ISO_SIZE; u++) {
+        const a = this.isoArea(u, v);
+        if (a < 0) continue;
+        const ar = this.isoArea(u + 1, v);
+        const ad = this.isoArea(u, v + 1);
+        if ((ar >= 0 && ar !== a) || (ad >= 0 && ad !== a)) u32[u + v * ISO_SIZE] = px;
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -242,23 +288,22 @@ export class MapView {
 
   private rebuildMarks() {
     this.marksU32.fill(0);
-    for (const i of this.store.marked) this.marksU32[i] = this.markPixel(i);
+    for (const i of this.store.marked) this.marksU32[TILE_ISO[i]] = this.markPixel(i);
     this.marksCtx.putImageData(this.marksImg, 0, 0);
     this.showCodesKey = this.store.settings.showCodes.join();
   }
 
   private updateMarks(indices: number[]) {
-    let c0 = COLS, c1 = -1, r0 = ROWS, r1 = -1;
+    let u0 = ISO_SIZE, u1 = -1, v0 = ISO_SIZE, v1 = -1;
     for (const i of indices) {
-      this.marksU32[i] = this.markPixel(i);
-      const c = i % COLS;
-      const r = (i - c) / COLS;
-      if (c < c0) c0 = c;
-      if (c > c1) c1 = c;
-      if (r < r0) r0 = r;
-      if (r > r1) r1 = r;
+      this.marksU32[TILE_ISO[i]] = this.markPixel(i);
+      const [u, v] = isoOf(i);
+      if (u < u0) u0 = u;
+      if (u > u1) u1 = u;
+      if (v < v0) v0 = v;
+      if (v > v1) v1 = v;
     }
-    if (c1 >= 0) this.marksCtx.putImageData(this.marksImg, 0, 0, c0, r0, c1 - c0 + 1, r1 - r0 + 1);
+    if (u1 >= 0) this.marksCtx.putImageData(this.marksImg, 0, 0, u0, v0, u1 - u0 + 1, v1 - v0 + 1);
   }
 
   private onStore = (ev: StoreEvent) => {
@@ -352,9 +397,8 @@ export class MapView {
   /** Centres (and zooms in on) a tile. */
   goTo(index: number, minScale = 24) {
     this.store.addRecent(index);
-    const col = index % COLS;
-    const row = (index - col) / COLS;
-    this.animateTo(col + 0.5, (row + 0.5) / 2, Math.max(this.scale, minScale));
+    const [x, y] = tileCenter(index);
+    this.animateTo(x, y, Math.max(this.scale, minScale));
   }
 
   private zoomAt(sx: number, sy: number, factor: number) {
@@ -368,10 +412,10 @@ export class MapView {
 
   tileAt(sx: number, sy: number): number {
     if (sx < RULER_LEFT || sy < RULER_TOP) return -1;
-    const col = Math.floor((sx - this.ox) / this.scale);
-    const row = Math.floor((sy - this.oy) / (this.scale / 2));
-    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return -1;
-    return row * COLS + col;
+    const wx = (sx - this.ox) / this.scale;
+    const wy = (sy - this.oy) / this.scale;
+    if (wx < MAP_X0 || wx > MAP_X1 || wy < MAP_Y0 || wy > MAP_Y1) return -1;
+    return tileAtWorld(wx, wy);
   }
 
   // ------------------------------------------------------------ input
@@ -547,6 +591,7 @@ export class MapView {
     if (this.pointers.size === 1 && this.mode === 'pinch') this.mode = 'pan';
     else if (this.pointers.size === 0) this.mode = 'none';
     this.updateCursor();
+    this.requestRender(); // e.g. refresh the treasure / scrap areas after a stroke
   };
 
   private onPointerLeave = (e: PointerEvent) => {
@@ -588,7 +633,7 @@ export class MapView {
     this.paintTo(this.tileAt(p.x, p.y));
   }
 
-  /** Paints (or erases) a brush-sized square around each tile on the line from the previous one, so fast drags leave no gaps. */
+  /** Paints (or erases) a brush-sized diamond around each tile on the line from the previous one, so fast drags leave no gaps. */
   private paintTo(i: number) {
     if (i < 0) {
       this.lastPaint = -1;
@@ -605,25 +650,21 @@ export class MapView {
       } else if (m !== code) this.store.setTile(j, code);
     };
     const paint = (centre: number) => {
-      const cc = centre % COLS;
-      const cr = (centre - cc) / COLS;
-      for (let r = Math.max(0, cr - radius); r <= Math.min(ROWS - 1, cr + radius); r++) {
-        for (let c = Math.max(0, cc - radius); c <= Math.min(COLS - 1, cc + radius); c++) paintOne(r * COLS + c);
-      }
+      for (const j of diamondTiles(centre, radius)) paintOne(j);
     };
     if (this.lastPaint < 0) paint(i);
     else {
-      let x0 = this.lastPaint % COLS;
-      let y0 = Math.floor(this.lastPaint / COLS);
-      const x1 = i % COLS;
-      const y1 = Math.floor(i / COLS);
+      // walk the iso grid so every tile between the two points is covered
+      let [x0, y0] = isoOf(this.lastPaint);
+      const [x1, y1] = isoOf(i);
       const dx = Math.abs(x1 - x0);
       const dy = -Math.abs(y1 - y0);
       const sx = x0 < x1 ? 1 : -1;
       const sy = y0 < y1 ? 1 : -1;
       let err = dx + dy;
       for (;;) {
-        paint(y0 * COLS + x0);
+        const j = fromIso(x0, y0);
+        if (j >= 0) paint(j);
         if (x0 === x1 && y0 === y1) break;
         const e2 = 2 * err;
         if (e2 >= dy) {
@@ -683,6 +724,47 @@ export class MapView {
     else this.requestRender();
   }
 
+  /** Visible part of the iso grid (whole cells, clamped to the texture). */
+  private isoView = { u0: 0, u1: 0, v0: 0, v1: 0 };
+
+  private updateIsoView() {
+    const { scale, ox, oy } = this;
+    const xs = [RULER_LEFT, this.w].map((x) => (x - ox) / scale);
+    const ys = [RULER_TOP, this.h].map((y) => (y - oy) / scale);
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const x of xs) {
+      for (const y of ys) {
+        const [u, v] = worldToIso(x, y);
+        u0 = Math.min(u0, u);
+        u1 = Math.max(u1, u);
+        v0 = Math.min(v0, v);
+        v1 = Math.max(v1, v);
+      }
+    }
+    const clamp = (n: number) => Math.min(ISO_SIZE, Math.max(0, n));
+    this.isoView = { u0: clamp(Math.floor(u0) - 1), u1: clamp(Math.ceil(u1) + 1), v0: clamp(Math.floor(v0) - 1), v1: clamp(Math.ceil(v1) + 1) };
+  }
+
+  /** Switches the context to iso cells (1 unit = one tile, turned 45°), shifted by (dx, dy) CSS px. */
+  private setIsoTransform(dx = 0, dy = 0) {
+    const { dpr, scale } = this;
+    const k = (scale / 2) * dpr;
+    this.ctx.setTransform(k, k, -k, k, dpr * (this.ox + dx + (scale * COLS) / 2), dpr * (this.oy + dy + scale * (0.25 - COLS / 2)));
+  }
+
+  private resetTransform() {
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  }
+
+  /** Draws the visible part of an iso texture; each texel lands on its tile's diamond. */
+  private drawIso(img: HTMLCanvasElement, dx = 0, dy = 0) {
+    const { u0, u1, v0, v1 } = this.isoView;
+    if (u1 <= u0 || v1 <= v0) return;
+    this.setIsoTransform(dx, dy);
+    this.ctx.drawImage(img, u0, v0, u1 - u0, v1 - v0, u0, v0, u1 - u0, v1 - v0);
+    this.resetTransform();
+  }
+
   render() {
     if (!this.w || !this.h) return;
     this.stepAnimation();
@@ -695,11 +777,12 @@ export class MapView {
     this.pinsActive = settings.showPins && scale < PIN_SCALE;
     this.pinHits = [];
 
-    // visible tile range
-    const c0 = Math.max(0, Math.floor((RULER_LEFT - ox) / scale));
-    const c1 = Math.min(COLS, Math.ceil((this.w - ox) / scale));
-    const r0 = Math.max(0, Math.floor((RULER_TOP - oy) / th));
-    const r1 = Math.min(ROWS, Math.ceil((this.h - oy) / th));
+    // visible tile range (rows/columns, one extra on each side for the staggered diamonds)
+    const c0 = Math.max(0, Math.floor((RULER_LEFT - ox) / scale) - 1);
+    const c1 = Math.min(COLS, Math.ceil((this.w - ox) / scale) + 1);
+    const r0 = Math.max(0, Math.floor((RULER_TOP - oy) / th) - 2);
+    const r1 = Math.min(ROWS, Math.ceil((this.h - oy) / th) + 2);
+    this.updateIsoView();
 
     ctx.save();
     ctx.beginPath();
@@ -707,59 +790,56 @@ export class MapView {
     ctx.clip();
 
     if (c0 < c1 && r0 < r1) {
-      const vx = ox + c0 * scale;
-      const vy = oy + r0 * th;
-      const vw = (c1 - c0) * scale;
-      const vh = (r1 - r0) * th;
-      const blit = (img: HTMLCanvasElement, k: number, kh: number) =>
-        ctx.drawImage(img, c0 * k, r0 * kh, (c1 - c0) * k, (r1 - r0) * kh, vx, vy, vw, vh);
+      // map layers, clipped to the map rectangle
+      const mx = ox + MAP_X0 * scale;
+      const my = oy + MAP_Y0 * scale;
+      const mw = (MAP_X1 - MAP_X0) * scale;
+      const mh = (MAP_Y1 - MAP_Y0) * scale;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(mx, my, mw, mh);
+      ctx.clip();
 
-      // zones
       ctx.imageSmoothingEnabled = false;
       if (settings.showZones) {
-        blit(this.zoneCanvas, 1, 1);
-        if (scale < FINE_BORDER_SCALE) blit(this.coarseBorder, 1, 1);
-        else if (scale < VECTOR_BORDER_SCALE) {
-          ctx.imageSmoothingEnabled = true;
-          blit(this.fineBorder, 4, 2);
-          ctx.imageSmoothingEnabled = false;
-        } else this.drawVectorBorders(c0, c1, r0, r1);
+        this.drawIso(this.zoneCanvas);
+        if (scale < VECTOR_BORDER_SCALE) this.drawIso(this.borderCanvas);
+        else this.drawVectorBorders();
       } else {
         ctx.fillStyle = theme.mapEmpty;
-        ctx.fillRect(vx, vy, vw, vh);
+        ctx.fillRect(mx, my, mw, mh);
       }
-      if (settings.showZones && scale < ZONE_LABEL_MAX_SCALE) this.drawZoneLabels();
 
       if (settings.dimUnmarked) {
         ctx.fillStyle = 'rgba(8,10,14,0.62)';
-        ctx.fillRect(vx, vy, vw, vh);
+        ctx.fillRect(mx, my, mw, mh);
       }
 
-      if (settings.showRanges) this.drawRanges(c0, c1, r0, r1);
+      if (settings.showRanges) this.drawRanges();
       this.drawCrosshair(c0, c1, r0, r1);
       this.drawLandmarks(false);
 
       // marks
       if (scale < BIG_MARK_SCALE) {
         // tiles are ~1-3px here: dilate marks by drawing the texture shifted +-1px so they stay visible
-        for (const dy of [-1, 0, 1]) {
-          for (const dx of [-1, 0, 1]) {
-            ctx.drawImage(this.marksCanvas, c0, r0, c1 - c0, r1 - r0, vx + dx, vy + dy, vw, vh);
-          }
-        }
-      } else blit(this.marksCanvas, 1, 1);
+        for (const dy of [-1, 0, 1]) for (const dx of [-1, 0, 1]) this.drawIso(this.marksCanvas, dx, dy);
+      } else this.drawIso(this.marksCanvas);
 
-      if (scale >= GRID_SCALE) this.drawGrid(c0, c1, r0, r1);
+      if (scale >= GRID_SCALE) this.drawGrid();
+      ctx.restore();
+
+      if (settings.showZones && scale < ZONE_LABEL_MAX_SCALE) this.drawZoneLabels();
       if (scale >= LETTER_SCALE) this.drawLetters(c0, c1, r0, r1);
       this.drawLandmarks(true);
       this.drawSelection();
       this.drawBrushPreview();
       if (this.hover >= 0 && scale >= 4 && settings.tool === 'select') {
-        const c = this.hover % COLS;
-        const r = (this.hover - c) / COLS;
+        const [hx, hy] = tileCenter(this.hover);
         ctx.strokeStyle = 'rgba(255,255,255,0.95)';
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(ox + c * scale, oy + r * th, scale, th);
+        ctx.beginPath();
+        diamondPath(ctx, ox + hx * scale, oy + hy * scale, scale / 2, scale / 2);
+        ctx.stroke();
       }
       if (this.pinsActive) this.drawPins();
     }
@@ -773,27 +853,37 @@ export class MapView {
     const { ctx, scale, ox, oy, store } = this;
     const tool = store.settings.tool;
     if (tool === 'select' && !this.box) return;
-    const th = scale / 2;
-    let c0: number, c1: number, r0: number, r1: number;
-    let code: number;
-    if (this.box) {
-      ({ c0, c1, r0, r1 } = boxBounds(this.box.a, this.box.b));
-      code = this.paintCode;
-    } else {
+    const code = this.box ? this.paintCode : tool === 'select' ? 0 : tool;
+    const color = code ? MARKS[code].color : '#ff4d4d';
+    const outline = () => {
+      ctx.setLineDash(code ? [] : [5, 3]);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    if (!this.box) {
+      // brush: a diamond of (2r+1) tiles across, centred on the hovered tile
       if (this.hover < 0 || this.mode === 'pan' || this.mode === 'pinch') return;
       const r = store.settings.brushShape === 'box' ? 0 : store.settings.brushSize;
-      const hc = this.hover % COLS;
-      const hr = (this.hover - hc) / COLS;
-      c0 = Math.max(0, hc - r);
-      c1 = Math.min(COLS - 1, hc + r);
-      r0 = Math.max(0, hr - r);
-      r1 = Math.min(ROWS - 1, hr + r);
-      code = tool === 'select' ? 0 : tool;
+      const [hx, hy] = tileCenter(this.hover);
+      const half = Math.max(4, (r + 0.5) * scale);
+      ctx.beginPath();
+      diamondPath(ctx, ox + hx * scale, oy + hy * scale, half, half);
+      outline();
+      return;
     }
-    let x = ox + c0 * scale;
-    let y = oy + r0 * th;
+
+    // box: the rows and columns between the two corner tiles
+    const { c0, c1, r0, r1 } = boxBounds(this.box.a, this.box.b);
+    let x = ox + (c0 + 0.25) * scale;
+    let y = oy + (centerY(r0) - 0.25) * scale;
     let w = (c1 - c0 + 1) * scale;
-    let h = (r1 - r0 + 1) * th;
+    let h = (r1 - r0 + 1) * (scale / 2);
     if (w < 6) {
       x -= (6 - w) / 2;
       w = 6;
@@ -802,57 +892,51 @@ export class MapView {
       y -= (6 - h) / 2;
       h = 6;
     }
-    const color = code ? MARKS[code].color : '#ff4d4d';
-    if (this.box) {
-      ctx.globalAlpha = 0.25;
-      ctx.fillStyle = color;
-      ctx.fillRect(x, y, w, h);
-      ctx.globalAlpha = 1;
-    }
-    ctx.setLineDash(code ? [] : [5, 3]);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.strokeRect(x - 1, y - 1, w + 2, h + 2);
-    ctx.strokeStyle = color;
-    ctx.strokeRect(x, y, w, h);
-    ctx.setLineDash([]);
-    if (this.box) {
-      const label = `${c1 - c0 + 1} × ${r1 - r0 + 1}`;
-      ctx.font = '600 12px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(10,12,16,0.85)';
-      ctx.strokeText(label, x, y - 3);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(label, x, y - 3);
-    }
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    outline();
+    const label = `${c1 - c0 + 1} × ${r1 - r0 + 1}`;
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(10,12,16,0.85)';
+    ctx.strokeText(label, x, y - 3);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, x, y - 3);
   }
 
-  private drawVectorBorders(c0: number, c1: number, r0: number, r1: number) {
-    const { ctx, scale, ox, oy } = this;
-    const th = scale / 2;
+  /** Area borders as lines along the diamond edges, drawn in iso space. */
+  private drawVectorBorders() {
+    const { ctx, scale } = this;
+    const { u0, u1, v0, v1 } = this.isoView;
+    this.setIsoTransform();
     ctx.beginPath();
-    for (let r = r0; r < r1; r++) {
-      const y = oy + r * th;
-      for (let c = c0; c < c1; c++) {
-        const i = r * COLS + c;
-        const a = zoneArea[i];
-        const x = ox + c * scale;
-        if (c + 1 < COLS && zoneArea[i + 1] !== a) {
-          ctx.moveTo(x + scale, y);
-          ctx.lineTo(x + scale, y + th);
+    for (let v = v0; v < v1; v++) {
+      for (let u = u0; u < u1; u++) {
+        const a = this.isoArea(u, v);
+        if (a < 0) continue;
+        const ar = this.isoArea(u + 1, v);
+        if (ar >= 0 && ar !== a) {
+          ctx.moveTo(u + 1, v);
+          ctx.lineTo(u + 1, v + 1);
         }
-        if (r + 1 < ROWS && zoneArea[i + COLS] !== a) {
-          ctx.moveTo(x, y + th);
-          ctx.lineTo(x + scale, y + th);
+        const ad = this.isoArea(u, v + 1);
+        if (ad >= 0 && ad !== a) {
+          ctx.moveTo(u, v + 1);
+          ctx.lineTo(u + 1, v + 1);
         }
       }
     }
     ctx.strokeStyle = `rgba(${BORDER_RGBA[0]},${BORDER_RGBA[1]},${BORDER_RGBA[2]},0.9)`;
-    ctx.lineWidth = Math.min(2.5, Math.max(1, scale / 12));
+    ctx.lineWidth = (Math.min(2.5, Math.max(1, scale / 12)) * Math.SQRT2) / scale; // CSS px -> iso units
     ctx.lineCap = 'square';
     ctx.stroke();
+    this.resetTransform();
   }
 
   private drawZoneLabels() {
@@ -864,79 +948,151 @@ export class MapView {
     ctx.fillStyle = 'rgba(40,48,66,0.5)';
     for (const a of areaLabels) {
       if (a.level === 6) continue;
-      const x = ox + (a.x - MIN_X + 0.5) * scale;
-      const y = oy + (a.y - MIN_Y + 0.5) * (scale / 2);
+      const r = a.y - MIN_Y;
+      const x = ox + centerX(a.x - MIN_X, r) * scale;
+      const y = oy + centerY(r) * scale;
       if (x < -size || y < -size || x > this.w + size || y > this.h + size) continue;
       ctx.fillText(String(a.level), x, y);
     }
   }
 
+  /** Highlights the selected tile's row (Y) and column (X). */
   private drawCrosshair(c0: number, c1: number, r0: number, r1: number) {
     const sel = this.store.selected;
     if (sel === null) return;
     const { ctx, scale, ox, oy } = this;
     const th = scale / 2;
-    const c = sel % COLS;
-    const r = (sel - c) / COLS;
+    const [cx, cy] = tileCenter(sel);
     const bw = Math.max(scale, 2);
     const bh = Math.max(th, 2);
-    const x = ox + (c + 0.5) * scale - bw / 2;
-    const y = oy + (r + 0.5) * th - bh / 2;
     ctx.fillStyle = 'rgba(255,179,179,0.6)'; // #FFB3B3
-    ctx.fillRect(x, oy + r0 * th, bw, (r1 - r0) * th);
-    ctx.fillRect(ox + c0 * scale, y, (c1 - c0) * scale, bh);
+    ctx.fillRect(ox + cx * scale - bw / 2, oy + r0 * th, bw, (r1 - r0) * th);
+    ctx.fillRect(ox + c0 * scale, oy + cy * scale - bh / 2, (c1 - c0 + 1) * scale, bh);
   }
 
-  private drawGrid(c0: number, c1: number, r0: number, r1: number) {
-    const { ctx, scale, ox, oy } = this;
-    const th = scale / 2;
+  /** Diamond grid: the lines of the iso grid. */
+  private drawGrid() {
+    const { ctx, scale } = this;
+    const { u0, u1, v0, v1 } = this.isoView;
+    this.setIsoTransform();
     ctx.beginPath();
-    for (let c = c0; c <= c1; c++) {
-      const x = Math.round(ox + c * scale) + 0.5;
-      ctx.moveTo(x, oy + r0 * th);
-      ctx.lineTo(x, oy + r1 * th);
+    for (let u = u0; u <= u1; u++) {
+      ctx.moveTo(u, v0);
+      ctx.lineTo(u, v1);
     }
-    for (let r = r0; r <= r1; r++) {
-      const y = Math.round(oy + r * th) + 0.5;
-      ctx.moveTo(ox + c0 * scale, y);
-      ctx.lineTo(ox + c1 * scale, y);
+    for (let v = v0; v <= v1; v++) {
+      ctx.moveTo(u0, v);
+      ctx.lineTo(u1, v);
     }
     ctx.strokeStyle = 'rgba(0,0,0,0.16)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = Math.SQRT2 / scale; // 1 CSS px
     ctx.stroke();
+    this.resetTransform();
   }
 
-  /** 39×39 square centred on each treasure / scrap tile, clipped to the map. */
-  private drawRanges(c0: number, c1: number, r0: number, r1: number) {
-    const { ctx, scale, ox, oy, store } = this;
-    const th = scale / 2;
+  /** Rebuilds the range coverage (bit k = inside a RANGE_CODES[k] area) and its two textures. */
+  private rebuildRanges() {
+    const { store } = this;
     const show = store.settings.showCodes;
-    ctx.lineWidth = 1.5;
-    for (const i of store.marked) {
-      const m = store.marks[i];
-      if (!RANGE_CODES.includes(m) || !show[m]) continue;
-      const c = i % COLS;
-      const r = (i - c) / COLS;
-      const a0 = Math.max(0, c - RANGE_RADIUS);
-      const a1 = Math.min(COLS, c + RANGE_RADIUS + 1);
-      const b0 = Math.max(0, r - RANGE_RADIUS);
-      const b1 = Math.min(ROWS, r + RANGE_RADIUS + 1);
-      if (a1 <= c0 || a0 >= c1 || b1 <= r0 || b0 >= r1) continue;
-      const x = ox + a0 * scale;
-      const y = oy + b0 * th;
-      const w = (a1 - a0) * scale;
-      const h = (b1 - b0) * th;
-      ctx.fillStyle = MARKS[m].color + '24';
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = MARKS[m].color + 'd0';
-      ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
+    const bits = this.rangeBits;
+    const N = ISO_SIZE;
+    bits.fill(0);
+    RANGE_CODES.forEach((code, k) => {
+      if (!show[code]) return;
+      const bit = 1 << k;
+      for (const i of store.marked) {
+        if (store.marks[i] !== code) continue;
+        const [u, v] = isoOf(i);
+        const a0 = Math.max(0, u - RANGE_RADIUS);
+        const a1 = Math.min(N - 1, u + RANGE_RADIUS);
+        for (let b = Math.max(0, v - RANGE_RADIUS); b <= Math.min(N - 1, v + RANGE_RADIUS); b++) {
+          for (let a = a0; a <= a1; a++) bits[a + b * N] |= bit;
+        }
+      }
+    });
+    const colors = RANGE_CODES.map((c) => packRgba(...hexToRgb(MARKS[c].color)));
+    const fill = new Uint32Array(this.rangeImg.data.buffer);
+    const edge = new Uint32Array(this.rangeEdgeImg.data.buffer);
+    fill.fill(0);
+    edge.fill(0);
+    for (let v = 0; v < N; v++) {
+      for (let u = 0; u < N; u++) {
+        const p = u + v * N;
+        const m = bits[p];
+        if (!m) continue;
+        for (let k = RANGE_CODES.length - 1; k >= 0; k--) {
+          if (!(m & (1 << k))) continue;
+          if (!fill[p]) fill[p] = colors[k];
+          const bit = 1 << k;
+          const inside = (q: number) => (bits[q] & bit) !== 0;
+          if (u === 0 || u === N - 1 || v === 0 || v === N - 1 || !inside(p - 1) || !inside(p + 1) || !inside(p - N) || !inside(p + N)) {
+            edge[p] = colors[k];
+          }
+        }
+      }
     }
+    this.rangeCtx.putImageData(this.rangeImg, 0, 0);
+    this.rangeEdgeCtx.putImageData(this.rangeEdgeImg, 0, 0);
+  }
+
+  /** 39×39 diamond around each treasure / scrap tile; overlapping areas merge into one outlined region. */
+  private drawRanges() {
+    const { ctx, scale, store } = this;
+    // rebuild only when treasure / scrap tiles changed, and not in the middle of a stroke
+    const version = `${this.marksVersion}|${store.settings.showCodes.join()}`;
+    if (this.rangeVersion !== version && this.mode !== 'paint' && this.mode !== 'box') {
+      this.rangeVersion = version;
+      let hash = 0;
+      for (const i of store.marked) if (RANGE_CODES.includes(store.marks[i])) hash = (hash * 31 + i * 7 + store.marks[i]) | 0;
+      const key = `${hash}|${store.settings.showCodes.join()}`;
+      if (this.rangeKey !== key) {
+        this.rangeKey = key;
+        this.rebuildRanges();
+      }
+    }
+    ctx.globalAlpha = 0.2;
+    this.drawIso(this.rangeCanvas);
+    ctx.globalAlpha = 1;
+
+    if (scale < VECTOR_BORDER_SCALE) {
+      // tiles are tiny: the baked outline (one tile wide) reads as a thin line
+      ctx.globalAlpha = 0.85;
+      this.drawIso(this.rangeEdgeCanvas);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    // outline of the merged areas along diamond edges, for the visible cells only
+    const { u0, u1, v0, v1 } = this.isoView;
+    const bits = this.rangeBits;
+    const N = ISO_SIZE;
+    this.setIsoTransform();
+    ctx.lineWidth = 1.5 * (Math.SQRT2 / scale);
+    RANGE_CODES.forEach((code, k) => {
+      const bit = 1 << k;
+      ctx.beginPath();
+      for (let v = Math.max(0, v0 - 1); v < Math.min(N - 1, v1); v++) {
+        for (let u = Math.max(0, u0 - 1); u < Math.min(N - 1, u1); u++) {
+          const p = u + v * N;
+          const here = bits[p] & bit;
+          if (here !== (bits[p + 1] & bit)) {
+            ctx.moveTo(u + 1, v);
+            ctx.lineTo(u + 1, v + 1);
+          }
+          if (here !== (bits[p + N] & bit)) {
+            ctx.moveTo(u, v + 1);
+            ctx.lineTo(u + 1, v + 1);
+          }
+        }
+      }
+      ctx.strokeStyle = MARKS[code].color + 'e0';
+      ctx.stroke();
+    });
+    this.resetTransform();
   }
 
   private drawLetters(c0: number, c1: number, r0: number, r1: number) {
     const { ctx, scale, ox, oy, store } = this;
-    const th = scale / 2;
-    const size = Math.min(th * 0.78, scale * 0.6);
+    const size = scale * 0.36;
     ctx.font = `700 ${size}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -945,58 +1101,51 @@ export class MapView {
         const i = r * COLS + c;
         const m = store.marks[i];
         if (!m || !isActiveMark(m) || !store.settings.showCodes[m]) continue;
-        const x = ox + c * scale;
-        const y = oy + r * th;
+        const x = ox + centerX(c, r) * scale;
+        const y = oy + centerY(r) * scale;
         ctx.fillStyle = MARKS[m].text;
-        ctx.fillText(MARKS[m].letter, x + scale / 2, y + th / 2 + 1);
+        ctx.fillText(MARKS[m].letter, x, y + 1);
         if (store.notes.has(i)) {
           ctx.beginPath();
-          ctx.arc(x + scale - 4, y + 4, 2.5, 0, Math.PI * 2);
+          ctx.arc(x + scale * 0.27, y, 2.5, 0, Math.PI * 2);
           ctx.fill();
         }
       }
     }
   }
 
+  /** Landmark footprints: a diamond reaching `size` tiles from the centre tile. */
   private drawLandmarks(top: boolean) {
     const { ctx, scale, ox, oy, store } = this;
-    const th = scale / 2;
     ctx.font = '600 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     for (const l of store.landmarks) {
       const color = store.typeOf(l).color;
-      const span = l.size * 2 + 1;
-      let x = ox + (l.x - MIN_X - l.size) * scale;
-      let y = oy + (l.y - MIN_Y - l.size) * th;
-      let w = span * scale;
-      let h = span * th;
-      if (w < 7) {
-        x -= (7 - w) / 2;
-        w = 7;
-      }
-      if (h < 7) {
-        y -= (7 - h) / 2;
-        h = 7;
-      }
-      if (x > this.w || y > this.h || x + w < 0 || y + h < 0) continue;
+      const r = l.y - MIN_Y;
+      const x = ox + centerX(l.x - MIN_X, r) * scale;
+      const y = oy + centerY(r) * scale;
+      const half = Math.max(4, (l.size + 0.5) * scale);
+      if (x - half > this.w || y - half > this.h || x + half < 0 || y + half < 0) continue;
+      ctx.beginPath();
+      diamondPath(ctx, x, y, half, half);
       if (!top) {
         ctx.globalAlpha = 0.45;
         ctx.fillStyle = color;
-        ctx.fillRect(x, y, w, h);
+        ctx.fill();
         ctx.globalAlpha = 1;
         continue;
       }
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.stroke();
       if (scale >= LANDMARK_LABEL_SCALE && !this.pinsActive) {
         const label = l.level ? `${l.name} (Lv ${l.level})` : l.name;
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(10,12,16,0.85)';
-        ctx.strokeText(label, x + w / 2, y - 2);
+        ctx.strokeText(label, x, y - half - 2);
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(label, x + w / 2, y - 2);
+        ctx.fillText(label, x, y - half - 2);
       }
     }
   }
@@ -1005,26 +1154,29 @@ export class MapView {
     const sel = this.store.selected;
     if (sel === null) return;
     const { ctx, scale, ox, oy } = this;
-    const th = scale / 2;
-    const c = sel % COLS;
-    const r = (sel - c) / COLS;
-    const x = ox + c * scale;
-    const y = oy + r * th;
+    const [cx, cy] = tileCenter(sel);
+    const x = ox + cx * scale;
+    const y = oy + cy * scale;
     ctx.strokeStyle = '#ff1f1f';
+    ctx.fillStyle = '#ff1f1f';
     if (scale < 10) {
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x + scale / 2, y + th / 2, 9, 0, Math.PI * 2);
+      ctx.arc(x, y, 9, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = '#ff1f1f';
-      ctx.fillRect(x + scale / 2 - Math.max(scale, 2) / 2, y + th / 2 - Math.max(th, 2) / 2, Math.max(scale, 2), Math.max(th, 2));
+      const half = Math.max(scale / 2, 1.5);
+      ctx.beginPath();
+      diamondPath(ctx, x, y, half, half);
+      ctx.fill();
     } else {
+      ctx.beginPath();
+      diamondPath(ctx, x, y, scale / 2, scale / 2);
       if (!this.store.marks[sel]) {
         ctx.fillStyle = 'rgba(255,31,31,0.45)';
-        ctx.fillRect(x, y, scale, th);
+        ctx.fill();
       }
       ctx.lineWidth = 2.5;
-      ctx.strokeRect(x, y, scale, th);
+      ctx.stroke();
     }
   }
 
@@ -1048,11 +1200,11 @@ export class MapView {
       const k = (Math.floor(c / cellC) * 4096 + Math.floor(r / cellR)) * 128 + zoneArea[i];
       let cl = cells.get(k);
       if (!cl) {
-        cl = { c: 0, r: 0, count: 0, counts: new Array<number>(CODE_SLOTS).fill(0), index: i, code: m, c0: c, c1: c, r0: r, r1: r };
+        cl = { x: 0, y: 0, count: 0, counts: new Array<number>(CODE_SLOTS).fill(0), index: i, code: m, c0: c, c1: c, r0: r, r1: r };
         cells.set(k, cl);
       }
-      cl.c += c;
-      cl.r += r;
+      cl.x += centerX(c, r);
+      cl.y += centerY(r);
       cl.count++;
       cl.counts[m]++;
       if (c < cl.c0) cl.c0 = c;
@@ -1062,11 +1214,11 @@ export class MapView {
     }
     const items = [...cells.values()];
     for (const cl of items) {
-      cl.c /= cl.count;
-      cl.r /= cl.count;
+      cl.x /= cl.count;
+      cl.y /= cl.count;
       cl.code = PIN_CODES.find((m) => cl.counts[m] > 0)!;
     }
-    items.sort((a, b) => a.r - b.r); // lower pins overlap upper ones
+    items.sort((a, b) => a.y - b.y); // lower pins overlap upper ones
     this.clusterCache = { key, items };
     return items;
   }
@@ -1165,13 +1317,12 @@ export class MapView {
 
   private drawPins() {
     const { ctx, scale, ox, oy, store } = this;
-    const th = scale / 2;
     const inView = (x: number, y: number) => x > RULER_LEFT - 30 && x < this.w + 30 && y > RULER_TOP - 10 && y < this.h + 60;
     const hits: PinHit[] = [];
 
     for (const cl of this.clusters()) {
-      const x = ox + (cl.c + 0.5) * scale;
-      const y = oy + (cl.r + 0.5) * th;
+      const x = ox + cl.x * scale;
+      const y = oy + cl.y * scale;
       if (!inView(x, y)) continue;
       const color = MARKS[cl.code].color;
       if (cl.count === 1) {
@@ -1193,8 +1344,9 @@ export class MapView {
     ctx.textBaseline = 'bottom';
     for (const l of store.landmarks) {
       const t = store.typeOf(l);
-      const x = ox + (l.x - MIN_X + 0.5) * scale;
-      const y = oy + (l.y - MIN_Y + 0.5) * th;
+      const [lx, ly0] = tileCenter(toIndex(l.x, l.y));
+      const x = ox + lx * scale;
+      const y = oy + ly0 * scale;
       if (!inView(x, y)) continue;
       const s = this.sprite(t.color, typeIcon(t), LANDMARK_PIN_SIZE);
       ctx.drawImage(s.canvas, x - s.ax, y - s.ay, s.w, s.h);
@@ -1246,12 +1398,10 @@ export class MapView {
     const el = this.card;
     if (!el) return;
     const sel = this.store.selected;
-    const th = this.scale / 2;
-    const c = sel === null ? 0 : sel % COLS;
-    const r = sel === null ? 0 : (sel - c) / COLS;
-    const x = this.ox + (c + 0.5) * this.scale;
-    const yTop = this.oy + r * th;
-    const yBot = yTop + th;
+    const [cx, cy] = tileCenter(sel ?? 0);
+    const x = this.ox + cx * this.scale;
+    const yTop = this.oy + (cy - 0.5) * this.scale;
+    const yBot = yTop + this.scale;
     const brushing = this.store.settings.tool !== 'select'; // the brush banner takes over while painting
     if (sel === null || brushing || x < RULER_LEFT || x > this.w || yBot < RULER_TOP || yTop > this.h) {
       el.style.visibility = 'hidden';
@@ -1273,13 +1423,12 @@ export class MapView {
 
   /** Pans (keeping the zoom) so a tile is comfortably inside the view. */
   ensureVisible(index: number) {
-    const c = index % COLS;
-    const r = (index - c) / COLS;
-    const x = this.ox + (c + 0.5) * this.scale;
-    const y = this.oy + (r + 0.5) * (this.scale / 2);
+    const [cx, cy] = tileCenter(index);
+    const x = this.ox + cx * this.scale;
+    const y = this.oy + cy * this.scale;
     const m = 60;
     if (x > RULER_LEFT + m && x < this.w - m && y > RULER_TOP + m && y < this.h - m) return;
-    this.animateTo(c + 0.5, (r + 0.5) / 2, this.scale);
+    this.animateTo(cx, cy, this.scale);
   }
 
   private pickStep(pxPerUnit: number, minPx: number): number {
