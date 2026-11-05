@@ -1,6 +1,6 @@
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, toIndex } from './coords';
 import { MARK_ICONS, PinIcon, drawIcon, readableOn } from './icons';
-import { MARKS, MARK_S, MARK_T, isActiveMark } from './marks';
+import { CODE_SLOTS, MARKS, PIN_CODES, isActiveMark } from './marks';
 import { typeIcon, type Store, type StoreEvent } from './store';
 import { LEVEL_COLORS, areaLabels, zoneArea, zoneLevel } from './zones';
 
@@ -20,7 +20,6 @@ const LANDMARK_LABEL_SCALE = 2.5;
 const BIG_MARK_SCALE = 4; // below this, marks are dilated so they stay visible
 const PIN_SCALE = 12; // below this, marks and landmarks are shown as pins (if enabled)
 const CLUSTER_CELL_PX = 46; // pins closer than about this merge into a cluster
-const PIN_CODES = [MARK_T, MARK_S]; // codes that get pins, in priority order (D gets none)
 const MARK_PIN_SIZE = 24;
 const LANDMARK_PIN_SIZE = 32;
 const RULER_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500];
@@ -157,7 +156,7 @@ export class MapView {
     [this.marksCanvas, this.marksCtx] = makeCanvas(COLS, ROWS);
     this.marksImg = this.marksCtx.createImageData(COLS, ROWS);
     this.marksU32 = new Uint32Array(this.marksImg.data.buffer);
-    this.markColors = [0, 1, 2, 3, 4].map((c) => (c ? packRgba(...hexToRgb(MARKS[c].color)) : 0));
+    this.markColors = Array.from({ length: CODE_SLOTS }, (_, c) => c).map((c) => (c ? packRgba(...hexToRgb(MARKS[c].color)) : 0));
     this.rebuildMarks();
     this.readTheme();
 
@@ -1020,7 +1019,7 @@ export class MapView {
       const k = Math.floor(c / cellC) * 4096 + Math.floor(r / cellR);
       let cl = cells.get(k);
       if (!cl) {
-        cl = { c: 0, r: 0, count: 0, counts: [0, 0, 0, 0, 0], index: i, code: m, c0: c, c1: c, r0: r, r1: r };
+        cl = { c: 0, r: 0, count: 0, counts: new Array<number>(CODE_SLOTS).fill(0), index: i, code: m, c0: c, c1: c, r0: r, r1: r };
         cells.set(k, cl);
       }
       cl.c += c;

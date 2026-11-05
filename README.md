@@ -5,14 +5,14 @@ Everything is saved in your browser's `localStorage`. Export and import JSON fil
 
 - **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` with tiles half as tall as they are wide, so the map looks square like in the game.
 - **Zones**: 73 level areas (L1–L5) plus the King's Throne, converted from the zone map image.
-- **Marks**: T (treasure found), R (reward / collected), D (dug, nothing), S (suspected), each with an optional note.
+- **Marks**: T (treasure found), C (scrap), S (suspected), D (dug, nothing), each with an optional note.
 - **Landmarks**: name, type, optional level, position and size, drawn on the map. Types, their colours and their icons (crown, ruin, castle, flag, star, gem, chest, dot) can be edited.
 - **Pins when zoomed out**:
-  - When tiles get too small to read, Treasure (chest icon) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
+  - When tiles get too small to read, Treasure (chest icon), Scrap (gear) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
   - Landmarks get bigger pins with their type's icon and their name.
   - Turn pins on or off under *Display & filters*.
 - **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
-- **Lists and stats**: mark counts per zone level, plus clickable lists of T / S / R tiles.
+- **Lists and stats**: mark counts per zone level, plus clickable lists of marked tiles.
 - **Undo/redo**, filters, dim unmarked tiles, and a dark UI by default (follows the system light/dark setting).
 - **Responsive layout**: a side panel on desktop (narrower on tablets), and an expandable bottom sheet under the map on phones.
 
@@ -67,8 +67,8 @@ The panel has five tabs, each split into groups:
 | Action | Mouse | Touch |
 | --- | --- | --- |
 | Select a tile (opens its card) | click or right-click; click again to deselect | tap; tap again to deselect |
-| Mark the selected tile | card buttons, or keys `1` `2` `3` (T/D/S) and `0`/`Delete` to clear | card buttons |
-| Paint with a brush (pick T/D/S/eraser in the toolbar) | click / drag; size 1/3/5/9 or **Box** (drag a rectangle) in the banner | tap / drag |
+| Mark the selected tile | card buttons, or keys `1` `2` `3` `4` (T/C/S/D) and `0`/`Delete` to clear | card buttons |
+| Paint with a brush (pick T/C/S/D/eraser in the toolbar) | click / drag; size 1/3/5/9 or **Box** (drag a rectangle) in the banner | tap / drag |
 | Erase while a brush is active | right-drag | pick the eraser |
 | Pan | drag (Select tool), or middle-drag / Space+drag with a brush | one-finger drag (Select tool), two fingers |
 | Zoom | wheel or double-click (Shift+wheel pans sideways) | pinch or double-tap |
@@ -82,7 +82,7 @@ Clicking a tile only selects it and never changes its mark. With a tile selected
 
 The **Go to X:Y** box in the toolbar jumps to a tile even when the side panel is closed. Every change shows a toast with **Undo**. While a brush is active, a banner on the map shows which one, with a **Done** button.
 
-Keyboard: `V` select tool, `T` `R` `D` `S` brushes, `E` eraser, `Esc` back to Select (or close the card), `F` fit map, `Z` zones on/off, `P` side panel, `+`/`-` zoom, `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`) undo/redo.
+Keyboard: `V` select tool, `T` `C` `S` `D` brushes, `E` eraser, `Esc` back to Select (or close the card), `F` fit map, `Z` zones on/off, `P` side panel, `+`/`-` zoom, `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`) undo/redo.
 
 Selecting a tile (by clicking it, using **Go**, or picking one from a list) shows its mark, note, zone level, nearest landmark, distance and offset in the Finder. Typing or pasting `123:456` (or `123 456`, `123,456`) into either coordinate box fills both. Coordinates outside 3–509 / 3–1021 are rejected.
 
@@ -109,7 +109,7 @@ Both can be undone. Entries with invalid coordinates (below 3 or beyond the map)
 
 ### Internals
 
-- Marks are a `Uint8Array(507 × 1019)` (0 = none, 1 = T, 2 = R, 3 = D, 4 = S) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
+- Marks are a `Uint8Array(507 × 1019)` (0 = none, 1 = T, 2 = R (hidden for now), 3 = D, 4 = S, 5 = C) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
 - `localStorage` stores the marks run-length encoded under the key `treasure-map:v1`. Saves are debounced and also flushed when the page is hidden.
 - Rendering: the zone colours, zone borders and marks are cached in offscreen canvases, one pixel per tile. Each frame blits only the visible region, and adds grid lines, letters, vector borders and landmarks on top for the visible tiles. A frame costs about 1–2 ms, even with tens of thousands of marks.
 

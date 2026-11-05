@@ -1,6 +1,6 @@
 import { MARK_ICONS } from '../lib/icons';
 import { PinGlyph } from './PinGlyph';
-import { MARKS, MARK_CODES } from '../lib/marks';
+import { CODE_SLOTS, MARKS, MARK_CODES, PIN_CODES } from '../lib/marks';
 import { useStore } from '../lib/useStore';
 import { LEVELS, LEVEL_COLORS, levelName, tilesPerLevel } from '../lib/zones';
 
@@ -13,11 +13,11 @@ export function DisplayOptions() {
         <input type="checkbox" checked={showZones} onChange={(e) => store.setSettings({ showZones: e.target.checked })} />
         Show zones
       </label>
-      <label className="check" title="When zoomed out, show treasure, suspected and reward tiles and landmarks as pins">
+      <label className="check" title="When zoomed out, show treasure, scrap and suspected tiles and landmarks as pins">
         <input type="checkbox" checked={showPins} onChange={(e) => store.setSettings({ showPins: e.target.checked })} />
         Pins when zoomed out
         <span className="pin-legend">
-          {[1, 4].map((c) => (
+          {PIN_CODES.map((c) => (
             <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={MARKS[c].name} />
           ))}
         </span>
@@ -76,8 +76,8 @@ export function StatsTable() {
             </td>
             <td className="num">{tilesPerLevel[l].toLocaleString()}</td>
             {MARK_CODES.map((m) => (
-              <td key={m} className={`num ${c[l * 5 + m] ? '' : 'zero'}`}>
-                {c[l * 5 + m]}
+              <td key={m} className={`num ${c[l * CODE_SLOTS + m] ? '' : 'zero'}`}>
+                {c[l * CODE_SLOTS + m]}
               </td>
             ))}
           </tr>

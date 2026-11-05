@@ -1,6 +1,6 @@
 import { TILE_COUNT, formatIndex, indexX, indexY, isValidCoord, toIndex } from './coords';
 import { PinIcon, isPinIcon } from './icons';
-import { MARKS, MarkCode, markFromLetter } from './marks';
+import { CODE_SLOTS, MARKS, MarkCode, markFromLetter } from './marks';
 import { zoneLevel } from './zones';
 
 export interface LandmarkType {
@@ -129,12 +129,19 @@ function defaultSettings(): Settings {
     showPins: true,
     brushSize: 0,
     brushShape: 'brush',
-    eraseCodes: [true, true, true, true, true],
-    showCodes: [true, true, true, true, true],
+    eraseCodes: new Array<boolean>(CODE_SLOTS).fill(true),
+    showCodes: new Array<boolean>(CODE_SLOTS).fill(true),
     dimUnmarked: false,
     tool: 'select',
     panelOpen: typeof window === 'undefined' || window.innerWidth > 820,
   };
+}
+
+/** Saved per-code flags, padded with `true` for codes added since they were saved. */
+function fitCodes(v: unknown): boolean[] {
+  const out = new Array<boolean>(CODE_SLOTS).fill(true);
+  if (Array.isArray(v)) v.slice(0, CODE_SLOTS).forEach((b, i) => (out[i] = b !== false));
+  return out;
 }
 
 function encodeRle(arr: Uint8Array): number[] {
@@ -159,7 +166,7 @@ function decodeRle(rle: unknown, into: Uint8Array): boolean {
   for (let i = 0; i + 1 < rle.length; i += 2) {
     const v = rle[i];
     const n = rle[i + 1];
-    if (typeof v !== 'number' || typeof n !== 'number' || v < 0 || v > 4 || n < 0 || k + n > into.length) return false;
+    if (typeof v !== 'number' || typeof n !== 'number' || v < 0 || v >= CODE_SLOTS || n < 0 || k + n > into.length) return false;
     into.fill(v, k, k + n);
     k += n;
   }
@@ -173,7 +180,7 @@ function cleanNote(text: unknown): string | undefined {
 }
 
 function parseMarkCode(v: unknown): MarkCode | null {
-  if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 4) return v as MarkCode;
+  if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v < CODE_SLOTS) return v as MarkCode;
   if (typeof v === 'string') return markFromLetter(v);
   return null;
 }
@@ -188,9 +195,9 @@ export class Store {
   /** Indices of all marked tiles (for fast iteration when marks are sparse). */
   readonly marked = new Set<number>();
   /** markCounts[code] */
-  readonly markCounts = new Array<number>(5).fill(0);
-  /** levelMarkCounts[level * 5 + code] */
-  readonly levelMarkCounts = new Array<number>(7 * 5).fill(0);
+  readonly markCounts = new Array<number>(CODE_SLOTS).fill(0);
+  /** levelMarkCounts[level * CODE_SLOTS + code] */
+  readonly levelMarkCounts = new Array<number>(7 * CODE_SLOTS).fill(0);
 
   landmarks: Landmark[] = DEFAULT_LANDMARKS.map((l) => ({ ...l }));
   types: LandmarkType[] = DEFAULT_TYPES.map((t) => ({ ...t }));
@@ -239,9 +246,9 @@ export class Store {
     if (prev !== mark) {
       const lvl = zoneLevel[i];
       this.markCounts[prev]--;
-      this.levelMarkCounts[lvl * 5 + prev]--;
+      this.levelMarkCounts[lvl * CODE_SLOTS + prev]--;
       this.markCounts[mark]++;
-      this.levelMarkCounts[lvl * 5 + mark]++;
+      this.levelMarkCounts[lvl * CODE_SLOTS + mark]++;
       this.marks[i] = mark;
       if (mark) this.marked.add(i);
       else this.marked.delete(i);
@@ -257,7 +264,7 @@ export class Store {
     for (let i = 0; i < TILE_COUNT; i++) {
       const m = this.marks[i];
       this.markCounts[m]++;
-      this.levelMarkCounts[zoneLevel[i] * 5 + m]++;
+      this.levelMarkCounts[zoneLevel[i] * CODE_SLOTS + m]++;
       if (m) this.marked.add(i);
     }
     for (const i of this.notes.keys()) if (!this.marks[i]) this.notes.delete(i);
@@ -709,10 +716,10 @@ export class Store {
         // on phones the panel covers the map, so always start with it closed
         const s = { ...defaultSettings(), ...d.settings, panelOpen: d.settings.panelOpen && window.innerWidth > 820 };
         if (s.tool === 'cycle') s.tool = 'select'; // saved before the select tool existed
-        if (!Array.isArray(s.eraseCodes) || s.eraseCodes.length !== 5) s.eraseCodes = defaultSettings().eraseCodes;
+        s.eraseCodes = fitCodes(s.eraseCodes);
         if (![0, 1, 2, 4].includes(s.brushSize)) s.brushSize = 0;
         if (s.brushShape !== 'box') s.brushShape = 'brush';
-        if (!Array.isArray(s.showCodes) || s.showCodes.length !== 5) s.showCodes = defaultSettings().showCodes;
+        s.showCodes = fitCodes(s.showCodes);
         this.settings = s;
       }
     } catch {

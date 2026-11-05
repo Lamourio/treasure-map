@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MARK_ICONS } from '../lib/icons';
-import { MARKS, MARK_CODES } from '../lib/marks';
+import { CODE_SLOTS, MARKS, MARK_CODES } from '../lib/marks';
 import { useStore } from '../lib/useStore';
 import { Icon } from './Icon';
 import { PinGlyph } from './PinGlyph';
@@ -56,7 +56,7 @@ export function BrushBanner() {
     if (MARK_CODES.some((m) => next[m])) store.setSettings({ eraseCodes: next }); // keep at least one
   };
   // from "All", picking a code narrows the eraser to just that code
-  const eraseOnly = (c: number) => store.setSettings({ eraseCodes: [0, 1, 2, 3, 4].map((m) => m === c) });
+  const eraseOnly = (c: number) => store.setSettings({ eraseCodes: Array.from({ length: CODE_SLOTS }, (_, m) => m === c) });
   const hint =
     brushShape === 'box'
       ? `Drag a box to ${eraser ? 'erase' : 'paint'} an area`
@@ -107,7 +107,7 @@ export function BrushBanner() {
           <div className="bb-seg" aria-label="Codes to erase">
             <button
               className={allCodes ? 'active' : ''}
-              onClick={() => store.setSettings({ eraseCodes: [true, true, true, true, true] })}
+              onClick={() => store.setSettings({ eraseCodes: new Array<boolean>(CODE_SLOTS).fill(true) })}
               title="Erase every mark"
             >
               All
@@ -154,9 +154,9 @@ export function FirstRunHint() {
     <div className="first-hint" role="dialog" aria-label="Getting started">
       <b>Getting started</b>
       <ul>
-        <li>Click or tap a tile to select it, then mark it from the card (or keys 1–3).</li>
+        <li>Click or tap a tile to select it, then mark it from the card (or keys 1–4).</li>
         <li>Drag to move. Wheel, pinch or double-click to zoom.</li>
-        <li>To mark many tiles at once, pick a brush (T D S) in the toolbar.</li>
+        <li>To mark many tiles at once, pick a brush (T C S D) in the toolbar.</li>
         <li>Type “123:456” in the Go box to jump to a tile.</li>
       </ul>
       <button className="primary" onClick={dismiss}>

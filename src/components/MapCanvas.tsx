@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatIndex, indexX, indexY } from '../lib/coords';
 import { HoverInfo, MapView } from '../lib/mapView';
-import { MARKS, MARK_CODES } from '../lib/marks';
+import { MARKS, MARK_CODES, PIN_CODES } from '../lib/marks';
 import { MARK_ICONS } from '../lib/icons';
 import { store, typeIcon } from '../lib/store';
 import { NoteInput } from './Finder';
@@ -73,7 +73,7 @@ function Tooltip({ info }: { info: HoverInfo }) {
     return (
       <div className="tooltip" style={{ left: Math.max(8, left), top }}>
         <div className="tooltip-coord">{info.cluster.count} marks here</div>
-        {[1, 4].map(
+        {PIN_CODES.map(
           (c) =>
             info.cluster!.counts[c] > 0 && (
               <div className="tooltip-row" key={c}>
@@ -161,7 +161,7 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
           {l.level ? ` (Lv ${l.level})` : ''}
         </div>
       ))}
-      <div className="card-hint">Keys: 1 T · 2 D · 3 S · 0 clear · arrows move</div>
+      <div className="card-hint">Keys: {MARK_CODES.map((c, n) => `${n + 1} ${MARKS[c].letter}`).join(' · ')} · 0 clear · arrows move</div>
     </>
   );
 }

@@ -22,7 +22,7 @@ export function Toolbar({ view }: { view: MapView | null }) {
         <button
           className={tool === 'select' ? 'active' : ''}
           onClick={() => setTool('select')}
-          title="Select: click a tile to select it, then mark it from the card or with keys 1–3 (V)"
+          title="Select: click a tile to select it, then mark it from the card or with keys 1–4 (V)"
           aria-pressed={tool === 'select'}
         >
           <Icon name="pointer" size={16} />
