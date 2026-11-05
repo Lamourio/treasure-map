@@ -1002,7 +1002,7 @@ export class MapView {
 
   // ------------------------------------------------------------ pins
 
-  /** Groups pin-worthy marks into screen-sized grid cells. Cached until the zoom band or the marks change. */
+  /** Groups pin-worthy marks into screen-sized grid cells, split by zone area. Cached until the zoom band or the marks change. */
   private clusters(): Cluster[] {
     const cellC = Math.max(1, 2 ** Math.ceil(Math.log2(CLUSTER_CELL_PX / this.scale)));
     const cellR = cellC * 2; // tiles are half as tall, so this keeps cells square on screen
@@ -1016,7 +1016,8 @@ export class MapView {
       if (!show[m] || !PIN_CODES.includes(m)) continue;
       const c = i % COLS;
       const r = (i - c) / COLS;
-      const k = Math.floor(c / cellC) * 4096 + Math.floor(r / cellR);
+      // one cluster per grid cell and zone area, so pins never merge across a zone border
+      const k = (Math.floor(c / cellC) * 4096 + Math.floor(r / cellR)) * 128 + zoneArea[i];
       let cl = cells.get(k);
       if (!cl) {
         cl = { c: 0, r: 0, count: 0, counts: new Array<number>(CODE_SLOTS).fill(0), index: i, code: m, c0: c, c1: c, r0: r, r1: r };
