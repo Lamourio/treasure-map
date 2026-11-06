@@ -218,15 +218,15 @@ function loadShared(into: Uint8Array, notes: Map<number, string>): { count: numb
 export class Store {
   /**
    * Shared marks: published with the site from src/data/shared.json, the same for every visitor
-   * and read-only in the app (only a code change edits them).
+   * and read-only in the app (only a code change edits them). They always win over own marks.
    */
   readonly shared = new Uint8Array(TILE_COUNT);
   readonly sharedNotes = new Map<number, string>();
   readonly sharedInfo: { count: number; updatedAt: string | null };
-  /** The visitor's own marks, saved in this browser. 0 = none: the shared mark shows through. */
+  /** The visitor's own marks, saved in this browser (ignored on tiles that have a shared mark). */
   readonly local = new Uint8Array(TILE_COUNT);
   readonly localNotes = new Map<number, string>();
-  /** What the map shows: the visitor's own mark where set, otherwise the shared one. Read-only. */
+  /** What the map shows: the shared mark where there is one, otherwise the visitor's own. Read-only. */
   readonly marks = new Uint8Array(TILE_COUNT);
   readonly notes = new Map<number, string>();
   /** Indices of all marked tiles (for fast iteration when marks are sparse). */
@@ -290,7 +290,7 @@ export class Store {
   /** Recomputes the shown mark and note of one tile from the two layers. */
   private refreshTile(i: number) {
     const prev = this.marks[i];
-    const mark = this.local[i] || this.shared[i];
+    const mark = this.shared[i] || this.local[i];
     if (prev !== mark) {
       const lvl = zoneLevel[i];
       this.markCounts[prev]--;
@@ -301,7 +301,7 @@ export class Store {
       if (mark) this.marked.add(i);
       else this.marked.delete(i);
     }
-    const note = this.local[i] ? this.localNotes.get(i) : this.sharedNotes.get(i);
+    const note = this.shared[i] ? this.sharedNotes.get(i) : this.localNotes.get(i);
     if (note) this.notes.set(i, note);
     else this.notes.delete(i);
   }
@@ -313,25 +313,30 @@ export class Store {
     this.marked.clear();
     this.notes.clear();
     for (let i = 0; i < TILE_COUNT; i++) {
-      const own = this.local[i];
-      const m = own || this.shared[i];
+      const pub = this.shared[i];
+      const m = pub || this.local[i];
       this.marks[i] = m;
       this.markCounts[m]++;
       this.levelMarkCounts[zoneLevel[i] * CODE_SLOTS + m]++;
       if (!m) continue;
       this.marked.add(i);
-      const note = own ? this.localNotes.get(i) : this.sharedNotes.get(i);
+      const note = pub ? this.sharedNotes.get(i) : this.localNotes.get(i);
       if (note) this.notes.set(i, note);
     }
   }
 
-  /** True when the tile shows a shared mark that the visitor has not covered with their own. */
+  /** True when the tile has a shared mark: it is read-only in the app. */
   isShared(i: number): boolean {
-    return this.shared[i] > 0 && !this.local[i];
+    return this.shared[i] > 0;
   }
 
-  /** Sets the visitor's own mark on a tile (0 = remove it; a shared mark underneath shows again). */
+  /** Sets the visitor's own mark on a tile (0 = remove it). Shared tiles are left alone. */
   setTile(i: number, mark: number, note: string | undefined = this.localNotes.get(i)) {
+    if (this.shared[i]) {
+      // brushes simply skip shared tiles; a direct edit says why nothing happened
+      if (!this.stroke) this.notify(`${formatIndex(i)} is a shared mark - read-only`);
+      return;
+    }
     const nn = mark ? cleanNote(note) : undefined;
     const pm = this.local[i];
     const pn = this.localNotes.get(i);
@@ -585,6 +590,8 @@ export class Store {
   markMany(indices: number[], code: number) {
     if (!indices.length) return;
     const label = code ? `Marked ${indices.length} tiles ${MARKS[code].letter}` : `Cleared ${indices.length} tiles`;
+    indices = indices.filter((i) => !this.shared[i]);
+    if (!indices.length) return;
     this.bulk(label, () => {
       for (const i of indices) {
         this.local[i] = code;
@@ -593,19 +600,23 @@ export class Store {
     });
   }
 
-  /** Own marks that say the same as the shared mark under them (e.g. after the shared map caught up). */
-  duplicateOwnMarks(): number[] {
+  /** Own marks on tiles that now have a shared mark (hidden, e.g. after the shared map caught up). */
+  hiddenOwnMarks(): number[] {
     const out: number[] = [];
-    for (let i = 0; i < TILE_COUNT; i++) {
-      if (this.local[i] && this.local[i] === this.shared[i] && (this.localNotes.get(i) ?? '') === (this.sharedNotes.get(i) ?? '')) out.push(i);
-    }
+    for (let i = 0; i < TILE_COUNT; i++) if (this.local[i] && this.shared[i]) out.push(i);
     return out;
   }
 
-  /** Drops the own marks returned by duplicateOwnMarks (one undoable step). */
-  removeDuplicateOwnMarks(): number {
-    const list = this.duplicateOwnMarks();
-    if (list.length) this.markMany(list, 0);
+  /** Drops the own marks returned by hiddenOwnMarks (one undoable step). */
+  removeHiddenOwnMarks(): number {
+    const list = this.hiddenOwnMarks();
+    if (!list.length) return 0;
+    this.bulk(`Removed ${list.length} own marks under shared marks`, () => {
+      for (const i of list) {
+        this.local[i] = 0;
+        this.localNotes.delete(i);
+      }
+    });
     return list.length;
   }
 
@@ -716,7 +727,9 @@ export class Store {
         if (!isValidCoord(x, y)) return warn(`mark #${n + 1} skipped (invalid coordinates ${m?.x}:${m?.y})`);
         const code = parseMarkCode(m.code);
         if (!code) return warn(`mark #${n + 1} at ${x}:${y} skipped (unknown code "${m.code}")`);
-        tiles.push({ i: toIndex(x, y), code, note: cleanNote(m.note) });
+        const i = toIndex(x, y);
+        if (this.shared[i]) return warn(`mark #${n + 1} at ${x}:${y} skipped (shared mark, read-only)`);
+        tiles.push({ i, code, note: cleanNote(m.note) });
       });
     }
 

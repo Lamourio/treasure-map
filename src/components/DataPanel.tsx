@@ -38,7 +38,7 @@ export function DataPanel() {
 
 
   const info = store.sharedInfo;
-  const dupes = store.duplicateOwnMarks().length;
+  const hidden = store.hiddenOwnMarks().length;
 
   return (
     <div className="data-panel">
@@ -48,14 +48,14 @@ export function DataPanel() {
           {info.updatedAt && <> · updated {info.updatedAt}</>}
         </div>
         <div className="muted small">
-          Published with the site and the same for everyone. Your own marks go on top and stay in this browser;
-          Export saves only your own marks.
+          Published with the site, the same for everyone and read-only. Your own marks go on the other tiles and
+          stay in this browser; Export saves only your own marks.
         </div>
-        {dupes > 0 && (
+        {hidden > 0 && (
           <button
-            onClick={() => setMsg({ kind: 'ok', text: `Removed ${store.removeDuplicateOwnMarks()} of your marks that the shared map already has.` })}
+            onClick={() => setMsg({ kind: 'ok', text: `Removed ${store.removeHiddenOwnMarks()} of your marks hidden under shared marks.` })}
           >
-            Remove {dupes} own mark{dupes === 1 ? '' : 's'} already in the shared map
+            Remove {hidden} own mark{hidden === 1 ? '' : 's'} hidden under shared marks
           </button>
         )}
       </div>

@@ -4,7 +4,7 @@ A single-page React app (Vite + TypeScript, no backend) for tracking a treasure 
 There are two layers of marks:
 
 - **Shared marks** ship with the site from [`src/data/shared.json`](src/data/shared.json). Every visitor sees them, and nobody can change them in the app; only a code change and a deploy can. Use them to publish the latest finds to everyone.
-- **Your own marks** are saved in your browser's `localStorage`, as before. They draw on top of the shared ones. Export and import JSON files for backups and sharing.
+- **Your own marks** are saved in your browser's `localStorage`, as before. They can go on any tile that has no shared mark. Export and import JSON files for backups and sharing.
 
 - **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` as **diamonds in staggered rows**, like in the game. Rows with an even Y sit half a tile to the right, so the lower-right neighbour of 100:200 is 101:201, and of 101:201 is 101:202. Rows are half a tile apart, so the map is square.
 - **Zones**: 73 level areas (L1–L5) plus the King's Throne, converted from the zone map image.
@@ -65,7 +65,7 @@ The build is fully static, and `base: './'` makes it work from any sub-path.
    This rewrites `src/data/shared.json` with one mark per line and sets `updatedAt` to today. You can also edit that file by hand; to remove a shared mark, delete its line.
 3. Commit and deploy. Visitors get the new marks the next time they load the page.
 
-In the app, a shared mark shows a **SHARED** tag in the tile card and tooltip, and it can't be cleared there. A visitor can still paint their own mark over it; clearing their own mark shows the shared one again. Once the shared map has caught up with your own marks, **More → Remove N own marks already in the shared map** tidies up your duplicates.
+Shared marks are **read-only** in the app: the tile card shows a **SHARED · READ-ONLY** tag with its buttons and note disabled, brushes and the eraser skip those tiles, and imports skip them too. An own mark made on a tile before it became shared is hidden (the shared mark wins); **More → Remove N own marks hidden under shared marks** cleans those up.
 
 > Saved data lives in each visitor's own browser, per site address. Moving to a new URL starts with an empty map, so export first and import at the new address.
 
@@ -128,7 +128,7 @@ Both can be undone. Entries with invalid coordinates (below 3 or beyond the map)
 
 ### Internals
 
-- Marks are two `Uint8Array(507 × 1019)` layers, shared and own; the map shows own ‖ shared. Codes: (0 = none, 1 = T, 2 = R (hidden for now), 3 = D, 4 = S, 5 = C) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
+- Marks are two `Uint8Array(507 × 1019)` layers, shared and own; the map shows shared ‖ own. Codes: (0 = none, 1 = T, 2 = R (hidden for now), 3 = D, 4 = S, 5 = C) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
 - `localStorage` stores your own marks run-length encoded under the key `treasure-map:v1`. Saves are debounced and also flushed when the page is hidden.
 - Rendering ([`src/lib/grid.ts`](src/lib/grid.ts), [`src/lib/mapView.ts`](src/lib/mapView.ts)): turned by 45°, the staggered diamonds form a plain square grid. Zone colours, zone borders, marks and the treasure / scrap areas are cached in offscreen canvases in that grid, one pixel per tile, and drawn with a rotating transform, so each pixel lands on its diamond. Each frame draws only the visible part, plus grid lines, letters, vector borders and landmarks for the visible tiles. A frame costs a few milliseconds.
 
