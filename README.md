@@ -78,7 +78,7 @@ The panel has five tabs, each split into groups:
 | **Tile** | Go to X:Y; the selected tile (mark, note, zone, nearest landmark, distance and offset, **Copy** X:Y); recent jumps |
 | **Marks** | Marked-tile browser for one code at a time, with a zone filter, note search, sorting by position or by distance from the selected tile, and **Copy list** (paste it into game chat); **Paste coordinates** to mark a whole list in one step; progress by zone |
 | **Landmarks** | Search, filter by type, sort by name or by distance from the selected tile; add, edit and delete; landmark types (colour, icon, name) |
-| **Map** | Zones, pins, treasure & scrap areas (39×39), dimming and which mark codes to show; legend |
+| **Map** | Marks from **Both / Mine / Shared**; zones, pins, treasure & scrap areas (39×39), dimming and which mark codes to show; legend |
 | **More** | Export and import (backup and sharing); how to use |
 
 ## Using the map

@@ -122,6 +122,8 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
   const note = store.notes.get(i) ?? '';
   const lms = store.landmarksAt(indexX(i), indexY(i));
   const shared = store.isShared(i);
+  // read-only: a shared tile, or the map shows shared marks only
+  const locked = shared || store.settings.markLayers === 'shared';
   return (
     <>
       <div className="card-head">
@@ -140,8 +142,8 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
             className={mark === c ? 'active' : ''}
             style={mark === c ? { background: MARKS[c].color, borderColor: MARKS[c].color, color: MARKS[c].text } : undefined}
             onClick={() => store.setTile(i, c)}
-            disabled={shared}
-            title={shared ? 'Shared mark - read-only' : `${MARKS[c].name} (key ${n + 1})`}
+            disabled={locked}
+            title={locked ? (shared ? 'Shared mark - read-only' : 'Showing shared marks only') : `${MARKS[c].name} (key ${n + 1})`}
             aria-pressed={mark === c}
           >
             <PinGlyph icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} />
@@ -150,8 +152,8 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
         ))}
         <button
           onClick={() => store.setTile(i, 0)}
-          disabled={shared || !mark}
-          title={shared ? 'Shared mark - read-only' : 'Clear mark (key 0 / Delete)'}
+          disabled={locked || !mark}
+          title={locked ? (shared ? 'Shared mark - read-only' : 'Showing shared marks only') : 'Clear mark (key 0 / Delete)'}
           aria-label="Clear mark"
         >
           ✕
@@ -164,7 +166,7 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
         </span>
         {mark > 0 && <SameMarkNav index={i} mark={mark} onJump={onJump} />}
       </div>
-      {mark > 0 && <NoteInput key={`${i}:${note}`} initial={note} disabled={shared} onCommit={(t) => store.setNote(i, t)} />}
+      {mark > 0 && <NoteInput key={`${i}:${note}`} initial={note} disabled={locked} onCommit={(t) => store.setNote(i, t)} />}
       {lms.map((l) => (
         <div className="card-landmark" key={l.id}>
           <PinGlyph icon={typeIcon(store.typeOf(l))} color={store.typeOf(l).color} size={16} />

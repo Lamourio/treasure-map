@@ -1479,3 +1479,14 @@ kbd {
 .shared-info button {
   align-self: flex-start;
 }
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.layer-row .segmented button {
+  padding: 3px 10px;
+}

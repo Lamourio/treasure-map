@@ -1,14 +1,38 @@
 import { MARK_ICONS } from '../lib/icons';
 import { PinGlyph } from './PinGlyph';
 import { CODE_SLOTS, MARKS, MARK_CODES, PIN_CODES, RANGE_CODES } from '../lib/marks';
+import type { MarkLayers } from '../lib/store';
 import { useStore } from '../lib/useStore';
+
+const LAYER_OPTIONS: { id: MarkLayers; label: string; title: string }[] = [
+  { id: 'both', label: 'Both', title: 'Shared marks and your own marks' },
+  { id: 'own', label: 'Mine', title: 'Only the marks you added in this browser' },
+  { id: 'shared', label: 'Shared', title: 'Only the marks published with the site' },
+];
 import { LEVELS, LEVEL_COLORS, levelName, tilesPerLevel } from '../lib/zones';
 
 export function DisplayOptions() {
   const store = useStore();
-  const { showZones, showPins, showRanges, showCodes, dimUnmarked } = store.settings;
+  const { showZones, showPins, showRanges, showCodes, dimUnmarked, markLayers } = store.settings;
   return (
     <div className="options">
+      <div className="layer-row">
+        <span>Marks from</span>
+        <div className="segmented" role="radiogroup" aria-label="Which marks to show">
+          {LAYER_OPTIONS.map((o) => (
+            <button
+              key={o.id}
+              role="radio"
+              aria-checked={markLayers === o.id}
+              className={markLayers === o.id ? 'active' : ''}
+              title={o.title}
+              onClick={() => store.setSettings({ markLayers: o.id })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <label className="check">
         <input type="checkbox" checked={showZones} onChange={(e) => store.setSettings({ showZones: e.target.checked })} />
         Show zones

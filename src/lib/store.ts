@@ -25,7 +25,11 @@ export interface Landmark {
 /** 'select' = click selects a tile; a MarkCode = brush that paints that code (0 = eraser). */
 export type Tool = 'select' | MarkCode;
 
+/** Which marks the map shows: shared and own, only the visitor's own, or only the shared ones. */
+export type MarkLayers = 'both' | 'own' | 'shared';
+
 export interface Settings {
+  markLayers: MarkLayers;
   showZones: boolean;
   showPins: boolean; // pins + clusters for marks and landmarks when zoomed out
   showRanges: boolean; // 39×39 square around each treasure and scrap tile
@@ -104,6 +108,7 @@ const HISTORY_LIMIT = 300;
 const RECENT_LIMIT = 12;
 const STORAGE_KEY = 'treasure-map:v1';
 const EXPORT_APP = 'treasure-hunt-map';
+const SHARED_ONLY_MSG = 'Showing shared marks only - switch to Both or Mine (Map tab) to edit your marks';
 
 export const DEFAULT_TYPES: LandmarkType[] = [
   { id: 'throne', name: "King's Throne", color: '#7030A0', icon: 'crown' },
@@ -127,6 +132,7 @@ export function uid(): string {
 
 function defaultSettings(): Settings {
   return {
+    markLayers: 'both',
     showZones: true,
     showPins: true,
     showRanges: true,
@@ -288,9 +294,22 @@ export class Store {
   }
 
   /** Recomputes the shown mark and note of one tile from the two layers. */
+  /** Shown mark of a tile for the current layer mode (shared marks win in "both"). */
+  private shownMark(i: number): number {
+    const mode = this.settings.markLayers;
+    if (mode === 'own') return this.local[i];
+    if (mode === 'shared') return this.shared[i];
+    return this.shared[i] || this.local[i];
+  }
+
+  private shownNote(i: number): string | undefined {
+    const fromShared = this.settings.markLayers === 'shared' || (this.settings.markLayers === 'both' && this.shared[i] > 0);
+    return fromShared ? this.sharedNotes.get(i) : this.localNotes.get(i);
+  }
+
   private refreshTile(i: number) {
     const prev = this.marks[i];
-    const mark = this.shared[i] || this.local[i];
+    const mark = this.shownMark(i);
     if (prev !== mark) {
       const lvl = zoneLevel[i];
       this.markCounts[prev]--;
@@ -301,7 +320,7 @@ export class Store {
       if (mark) this.marked.add(i);
       else this.marked.delete(i);
     }
-    const note = this.shared[i] ? this.sharedNotes.get(i) : this.localNotes.get(i);
+    const note = mark ? this.shownNote(i) : undefined;
     if (note) this.notes.set(i, note);
     else this.notes.delete(i);
   }
@@ -313,14 +332,13 @@ export class Store {
     this.marked.clear();
     this.notes.clear();
     for (let i = 0; i < TILE_COUNT; i++) {
-      const pub = this.shared[i];
-      const m = pub || this.local[i];
+      const m = this.shownMark(i);
       this.marks[i] = m;
       this.markCounts[m]++;
       this.levelMarkCounts[zoneLevel[i] * CODE_SLOTS + m]++;
       if (!m) continue;
       this.marked.add(i);
-      const note = pub ? this.sharedNotes.get(i) : this.localNotes.get(i);
+      const note = this.shownNote(i);
       if (note) this.notes.set(i, note);
     }
   }
@@ -335,6 +353,10 @@ export class Store {
     if (this.shared[i]) {
       // brushes simply skip shared tiles; a direct edit says why nothing happened
       if (!this.stroke) this.notify(`${formatIndex(i)} is a shared mark - read-only`);
+      return;
+    }
+    if (this.settings.markLayers === 'shared') {
+      if (!this.stroke) this.notify(SHARED_ONLY_MSG);
       return;
     }
     const nn = mark ? cleanNote(note) : undefined;
@@ -366,6 +388,7 @@ export class Store {
 
   beginStroke() {
     this.endStroke();
+    if (this.settings.markLayers === 'shared') this.notify(SHARED_ONLY_MSG);
     this.stroke = new Map();
   }
 
@@ -470,7 +493,13 @@ export class Store {
   // ------------------------------------------------------------- settings
 
   setSettings(patch: Partial<Settings>) {
+    const layersChanged = patch.markLayers !== undefined && patch.markLayers !== this.settings.markLayers;
     this.settings = { ...this.settings, ...patch };
+    if (layersChanged) {
+      this.endStroke();
+      this.recountMarks();
+      this.emit({ type: 'marks', indices: null });
+    }
     this.emit({ type: 'settings' });
   }
 
@@ -590,6 +619,7 @@ export class Store {
   markMany(indices: number[], code: number) {
     if (!indices.length) return;
     const label = code ? `Marked ${indices.length} tiles ${MARKS[code].letter}` : `Cleared ${indices.length} tiles`;
+    if (this.settings.markLayers === 'shared') return this.notify(SHARED_ONLY_MSG);
     indices = indices.filter((i) => !this.shared[i]);
     if (!indices.length) return;
     this.bulk(label, () => {
@@ -810,6 +840,7 @@ export class Store {
         if (![0, 1, 2, 4].includes(s.brushSize)) s.brushSize = 0;
         if (s.brushShape !== 'box') s.brushShape = 'brush';
         s.showCodes = fitCodes(s.showCodes);
+        if (!['both', 'own', 'shared'].includes(s.markLayers)) s.markLayers = 'both';
         this.settings = s;
       }
     } catch {
