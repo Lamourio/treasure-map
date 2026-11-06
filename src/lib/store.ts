@@ -2,6 +2,7 @@ import { TILE_COUNT, formatIndex, indexX, indexY, isValidCoord, toIndex } from '
 import { PinIcon, isPinIcon } from './icons';
 import { CODE_SLOTS, MARKS, MarkCode, markFromLetter } from './marks';
 import { zoneLevel } from './zones';
+import sharedData from '../data/shared.json';
 
 export interface LandmarkType {
   id: string;
@@ -191,7 +192,41 @@ function isHexColor(v: unknown): v is string {
   return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 }
 
+/** Marks that ship with the site (src/data/shared.json), read once at start-up. */
+function loadShared(into: Uint8Array, notes: Map<number, string>): { count: number; updatedAt: string | null } {
+  const d = sharedData as { updatedAt?: unknown; marks?: unknown };
+  let count = 0;
+  if (Array.isArray(d.marks)) {
+    d.marks.forEach((m: any, n: number) => {
+      const x = Number(m?.x);
+      const y = Number(m?.y);
+      const code = parseMarkCode(m?.code);
+      if (!isValidCoord(x, y) || !code) {
+        console.warn(`shared.json: mark #${n + 1} skipped (${m?.x}:${m?.y} ${m?.code})`);
+        return;
+      }
+      const i = toIndex(x, y);
+      if (!into[i]) count++;
+      into[i] = code;
+      const note = cleanNote(m.note);
+      if (note) notes.set(i, note);
+    });
+  }
+  return { count, updatedAt: typeof d.updatedAt === 'string' && d.updatedAt ? d.updatedAt : null };
+}
+
 export class Store {
+  /**
+   * Shared marks: published with the site from src/data/shared.json, the same for every visitor
+   * and read-only in the app (only a code change edits them).
+   */
+  readonly shared = new Uint8Array(TILE_COUNT);
+  readonly sharedNotes = new Map<number, string>();
+  readonly sharedInfo: { count: number; updatedAt: string | null };
+  /** The visitor's own marks, saved in this browser. 0 = none: the shared mark shows through. */
+  readonly local = new Uint8Array(TILE_COUNT);
+  readonly localNotes = new Map<number, string>();
+  /** What the map shows: the visitor's own mark where set, otherwise the shared one. Read-only. */
   readonly marks = new Uint8Array(TILE_COUNT);
   readonly notes = new Map<number, string>();
   /** Indices of all marked tiles (for fast iteration when marks are sparse). */
@@ -219,6 +254,7 @@ export class Store {
   private saveTimer: number | undefined;
 
   constructor() {
+    this.sharedInfo = loadShared(this.shared, this.sharedNotes);
     this.load();
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', () => this.flushSave());
@@ -243,8 +279,18 @@ export class Store {
 
   // ---------------------------------------------------------------- tiles
 
+  /** Sets the visitor's own mark and note of a tile, then refreshes what is shown there. */
   private applyTile(i: number, mark: number, note: string | undefined) {
+    this.local[i] = mark;
+    if (mark && note) this.localNotes.set(i, note);
+    else this.localNotes.delete(i);
+    this.refreshTile(i);
+  }
+
+  /** Recomputes the shown mark and note of one tile from the two layers. */
+  private refreshTile(i: number) {
     const prev = this.marks[i];
+    const mark = this.local[i] || this.shared[i];
     if (prev !== mark) {
       const lvl = zoneLevel[i];
       this.markCounts[prev]--;
@@ -255,28 +301,40 @@ export class Store {
       if (mark) this.marked.add(i);
       else this.marked.delete(i);
     }
+    const note = this.local[i] ? this.localNotes.get(i) : this.sharedNotes.get(i);
     if (note) this.notes.set(i, note);
     else this.notes.delete(i);
   }
 
   private recountMarks() {
+    for (const i of this.localNotes.keys()) if (!this.local[i]) this.localNotes.delete(i);
     this.markCounts.fill(0);
     this.levelMarkCounts.fill(0);
     this.marked.clear();
+    this.notes.clear();
     for (let i = 0; i < TILE_COUNT; i++) {
-      const m = this.marks[i];
+      const own = this.local[i];
+      const m = own || this.shared[i];
+      this.marks[i] = m;
       this.markCounts[m]++;
       this.levelMarkCounts[zoneLevel[i] * CODE_SLOTS + m]++;
-      if (m) this.marked.add(i);
+      if (!m) continue;
+      this.marked.add(i);
+      const note = own ? this.localNotes.get(i) : this.sharedNotes.get(i);
+      if (note) this.notes.set(i, note);
     }
-    for (const i of this.notes.keys()) if (!this.marks[i]) this.notes.delete(i);
   }
 
-  /** Sets a tile's mark (clearing a mark drops its note). Part of the open stroke, if any. */
-  setTile(i: number, mark: number, note: string | undefined = this.notes.get(i)) {
+  /** True when the tile shows a shared mark that the visitor has not covered with their own. */
+  isShared(i: number): boolean {
+    return this.shared[i] > 0 && !this.local[i];
+  }
+
+  /** Sets the visitor's own mark on a tile (0 = remove it; a shared mark underneath shows again). */
+  setTile(i: number, mark: number, note: string | undefined = this.localNotes.get(i)) {
     const nn = mark ? cleanNote(note) : undefined;
-    const pm = this.marks[i];
-    const pn = this.notes.get(i);
+    const pm = this.local[i];
+    const pn = this.localNotes.get(i);
     if (pm === mark && pn === nn) return;
     if (this.stroke) {
       const c = this.stroke.get(i);
@@ -494,17 +552,17 @@ export class Store {
 
   private snapshot(): Snapshot {
     return {
-      marks: this.marks.slice(),
-      notes: new Map(this.notes),
+      marks: this.local.slice(),
+      notes: new Map(this.localNotes),
       landmarks: this.landmarks,
       types: this.types,
     };
   }
 
   private restoreSnapshot(s: Snapshot) {
-    this.marks.set(s.marks);
-    this.notes.clear();
-    for (const [k, v] of s.notes) this.notes.set(k, v);
+    this.local.set(s.marks);
+    this.localNotes.clear();
+    for (const [k, v] of s.notes) this.localNotes.set(k, v);
     this.landmarks = s.landmarks;
     this.types = s.types;
     this.recountMarks();
@@ -529,24 +587,41 @@ export class Store {
     const label = code ? `Marked ${indices.length} tiles ${MARKS[code].letter}` : `Cleared ${indices.length} tiles`;
     this.bulk(label, () => {
       for (const i of indices) {
-        this.marks[i] = code;
-        if (!code) this.notes.delete(i);
+        this.local[i] = code;
+        if (!code) this.localNotes.delete(i);
       }
     });
   }
 
+  /** Own marks that say the same as the shared mark under them (e.g. after the shared map caught up). */
+  duplicateOwnMarks(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < TILE_COUNT; i++) {
+      if (this.local[i] && this.local[i] === this.shared[i] && (this.localNotes.get(i) ?? '') === (this.sharedNotes.get(i) ?? '')) out.push(i);
+    }
+    return out;
+  }
+
+  /** Drops the own marks returned by duplicateOwnMarks (one undoable step). */
+  removeDuplicateOwnMarks(): number {
+    const list = this.duplicateOwnMarks();
+    if (list.length) this.markMany(list, 0);
+    return list.length;
+  }
+
   // ------------------------------------------------------- export / import
 
+  /** The visitor's own marks (not the shared ones) plus landmarks. Same format as shared.json. */
   exportData() {
-    const marks = [...this.marked]
-      .sort((a, b) => a - b)
-      .map((i) => {
+    const own: number[] = [];
+    for (let i = 0; i < TILE_COUNT; i++) if (this.local[i]) own.push(i);
+    const marks = own.map((i) => {
         const m: { x: number; y: number; code: string; note?: string } = {
           x: indexX(i),
           y: indexY(i),
-          code: MARKS[this.marks[i]].letter,
+          code: MARKS[this.local[i]].letter,
         };
-        const note = this.notes.get(i);
+        const note = this.localNotes.get(i);
         if (note) m.note = note;
         return m;
       });
@@ -647,13 +722,13 @@ export class Store {
 
     this.bulk(`Imported ${tiles.length} marks and ${landmarkCount} landmarks`, () => {
       if (mode === 'replace') {
-        this.marks.fill(0);
-        this.notes.clear();
+        this.local.fill(0);
+        this.localNotes.clear();
       }
       for (const t of tiles) {
-        this.marks[t.i] = t.code;
-        if (t.note) this.notes.set(t.i, t.note);
-        else this.notes.delete(t.i);
+        this.local[t.i] = t.code;
+        if (t.note) this.localNotes.set(t.i, t.note);
+        else this.localNotes.delete(t.i);
       }
       this.landmarks = landmarks;
       this.types = types;
@@ -676,8 +751,8 @@ export class Store {
     try {
       const payload = {
         v: 1,
-        marks: encodeRle(this.marks),
-        notes: [...this.notes],
+        marks: encodeRle(this.local),
+        notes: [...this.localNotes],
         landmarks: this.landmarks,
         types: this.types,
         settings: this.settings,
@@ -704,11 +779,11 @@ export class Store {
     }
     try {
       const d = JSON.parse(raw);
-      if (!decodeRle(d.marks, this.marks)) this.marks.fill(0);
+      if (!decodeRle(d.marks, this.local)) this.local.fill(0);
       if (Array.isArray(d.notes)) {
         for (const [i, text] of d.notes) {
           const note = cleanNote(text);
-          if (Number.isInteger(i) && i >= 0 && i < TILE_COUNT && note) this.notes.set(i, note);
+          if (Number.isInteger(i) && i >= 0 && i < TILE_COUNT && note) this.localNotes.set(i, note);
         }
       }
       if (Array.isArray(d.types) && d.types.length) this.types = d.types;

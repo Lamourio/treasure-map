@@ -1452,3 +1452,30 @@ kbd {
   border: none;
   background: none;
 }
+
+/* marks published with the site (src/data/shared.json) */
+.shared-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+  background: rgba(0, 176, 240, 0.18);
+  color: #4fc3f7;
+  border: 1px solid rgba(0, 176, 240, 0.45);
+}
+.shared-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+.shared-info button {
+  align-self: flex-start;
+}

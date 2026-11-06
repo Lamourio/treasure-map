@@ -97,6 +97,7 @@ function Tooltip({ info }: { info: HoverInfo }) {
         <div className="tooltip-row">
           <PinGlyph icon={MARK_ICONS[mark]} color={MARKS[mark].color} />
           {MARKS[mark].name}
+          {store.isShared(i) && <span className="shared-tag">shared</span>}
         </div>
       )}
       {note && <div className="tooltip-note">{note}</div>}
@@ -120,6 +121,9 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
   const mark = store.marks[i];
   const note = store.notes.get(i) ?? '';
   const lms = store.landmarksAt(indexX(i), indexY(i));
+  const shared = store.isShared(i);
+  // own mark that differs from the shared one under it
+  const under = store.local[i] && store.shared[i] !== store.local[i] ? store.shared[i] : 0;
   return (
     <>
       <div className="card-head">
@@ -145,12 +149,21 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
             {MARKS[c].letter}
           </button>
         ))}
-        <button onClick={() => store.setTile(i, 0)} disabled={!mark} title="Clear mark (key 0 / Delete)" aria-label="Clear mark">
+        <button
+          onClick={() => store.setTile(i, 0)}
+          disabled={!store.local[i]}
+          title={shared ? 'Shared marks can only be changed in the site code' : 'Clear mark (key 0 / Delete)'}
+          aria-label="Clear mark"
+        >
           ✕
         </button>
       </div>
       <div className="card-status">
-        <span>{mark ? MARKS[mark].name : 'No mark'}</span>
+        <span>
+          {mark ? MARKS[mark].name : 'No mark'}
+          {shared && <span className="shared-tag" title="Published with the site, the same for everyone">shared</span>}
+          {under > 0 && <span className="muted"> · shared map: {MARKS[under].letter}</span>}
+        </span>
         {mark > 0 && <SameMarkNav index={i} mark={mark} onJump={onJump} />}
       </div>
       {mark > 0 && <NoteInput key={`${i}:${note}`} initial={note} disabled={false} onCommit={(t) => store.setNote(i, t)} />}

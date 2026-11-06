@@ -18,7 +18,7 @@ export function DataPanel() {
     a.download = `treasure-map-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setMsg({ kind: 'ok', text: `Exported ${data.marks.length} marks and ${data.landmarks.length} landmarks.` });
+    setMsg({ kind: 'ok', text: `Exported ${data.marks.length} of your marks and ${data.landmarks.length} landmarks.` });
   };
 
   const importFile = async (file: File) => {
@@ -37,8 +37,28 @@ export function DataPanel() {
   };
 
 
+  const info = store.sharedInfo;
+  const dupes = store.duplicateOwnMarks().length;
+
   return (
     <div className="data-panel">
+      <div className="shared-info">
+        <div>
+          <b>Shared map:</b> {info.count} mark{info.count === 1 ? '' : 's'}
+          {info.updatedAt && <> · updated {info.updatedAt}</>}
+        </div>
+        <div className="muted small">
+          Published with the site and the same for everyone. Your own marks go on top and stay in this browser;
+          Export saves only your own marks.
+        </div>
+        {dupes > 0 && (
+          <button
+            onClick={() => setMsg({ kind: 'ok', text: `Removed ${store.removeDuplicateOwnMarks()} of your marks that the shared map already has.` })}
+          >
+            Remove {dupes} own mark{dupes === 1 ? '' : 's'} already in the shared map
+          </button>
+        )}
+      </div>
       <div className="row">
         <button className="primary" onClick={exportJson}>
           Export JSON
