@@ -25,14 +25,20 @@ export const PIN_CODES: number[] = [1, 5, 4];
 /** Codes that get an area drawn around them (when enabled). */
 export const RANGE_CODES: number[] = [1, 5, 6];
 
+/** Half-size of the areas in diamond steps: 39×39 tiles centred on the marked tile. */
+export const RANGE_RADIUS = 19;
+
 /**
  * Extent of each code's area in diamond steps from the marked tile: [towards the top, towards the
- * bottom]. T and C: 39×39 centred on the tile. X: 38×38, which has no middle tile, so it reaches
- * one tile less towards the bottom.
+ * bottom]. T, C and X all cover the same 39×39 area centred on the tile.
  */
-export const RANGE_EXTENT: Record<number, [number, number]> = { 1: [19, 19], 5: [19, 19], 6: [19, 18] };
+export const RANGE_EXTENT: Record<number, [number, number]> = {
+  1: [RANGE_RADIUS, RANGE_RADIUS],
+  5: [RANGE_RADIUS, RANGE_RADIUS],
+  6: [RANGE_RADIUS, RANGE_RADIUS],
+};
 
-/** Side of a code's area in tiles (39 or 38). */
+/** Side of a code's area in tiles (39). */
 export function rangeSize(code: number): number {
   const [a, b] = RANGE_EXTENT[code];
   return a + b + 1;
@@ -55,7 +61,7 @@ export const MARKS: Record<number, MarkInfo> = {
   3: { letter: 'D', name: 'Dug, nothing here', color: '#7F7F7F', text: '#ffffff' },
   4: { letter: 'S', name: 'Suspected', color: '#FFFF00', text: '#1a1a1a' },
   5: { letter: 'C', name: 'Scrap', color: '#00B0F0', text: '#1a1a1a' },
-  6: { letter: 'X', name: 'Empty area (38×38)', color: '#6C5B9E', text: '#ffffff' },
+  6: { letter: 'X', name: 'Empty area (39×39)', color: '#6C5B9E', text: '#ffffff' },
 };
 
 export function markFromLetter(letter: string): MarkCode | null {

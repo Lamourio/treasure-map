@@ -10,8 +10,9 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 // is h(d) = 1 - exp(-(d / R)^4), with d its distance to the nearest find: ~0 right next to a
 // find, ~0.5 at 30 tiles, ~1 from about 45 tiles. Treasures and scrap showed the same spacing
 // (no extra treasure-treasure gap), so both count as finds. A dug-empty tile (D) only rules out
-// that tile; an empty-area mark (X) rules out its whole 38×38 area. Neither pushes drops away. An area's chance is the share of the total weight that lies in it, so it grows with
-// both its size and how empty it is.
+// that tile; an empty-area mark (X) rules out its whole 39×39 area. Neither pushes drops away.
+// An area's chance is the share of the total weight that lies in it, so it grows with both its
+// size and how empty it is.
 //
 // Distances are diamond-grid steps (Chebyshev distance in iso space), the same metric as the
 // 39×39 areas.
@@ -20,7 +21,7 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 export const FIND_CODES: number[] = [MARK_T, MARK_C];
 /** Dug, nothing there: only that tile is ruled out. */
 export const DUG_CODE = MARK_D;
-/** Searched 38×38 area with nothing in it: every tile of the area is ruled out. */
+/** Searched 39×39 area with nothing in it: every tile of the area is ruled out. */
 export const EMPTY_AREA_CODE = MARK_X;
 /** Fitted keep-away radius (tiles) and sharpness of the weight curve. */
 export const KEEP_AWAY = 33;
