@@ -864,7 +864,7 @@ export class MapView {
   /** Heatmap of where the next drop can be (inside the map clip), or the search boxes and numbered badges on top. */
   private drawSuggestions(badges: boolean) {
     const { ctx, store } = this;
-    const res = getSuggestions(store.marks, store.marked, store.marksRevision, store.settings.suggestLevel);
+    const res = getSuggestions(store.marks, store.marked, store.marksRevision, store.settings.suggestLevel, store.stroking);
     if (!res.list.length) return;
     if (badges) return this.drawSuggestionBadges(res.list);
     if (this.heatSource !== res) {

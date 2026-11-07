@@ -19,7 +19,7 @@ function pct(x: number): string {
 export function SearchSuggestions({ view }: { view: MapView | null }) {
   const store = useStore();
   const { suggestLevel, showSuggestions, showSearchBoxes } = store.settings;
-  const { list } = getSuggestions(store.marks, store.marked, store.marksRevision, suggestLevel);
+  const { list } = getSuggestions(store.marks, store.marked, store.marksRevision, suggestLevel, store.stroking);
 
   const jump = (i: number) => {
     store.select(i);

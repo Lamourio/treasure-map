@@ -24,8 +24,9 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 // level (tiles off the map are fine): each tile it spends on another level costs SPILL_COST of a
 // likely tile, and at most MAX_SPILL of it may spill. So a search only pushes over the border
 // when that picks up a strip along it, instead of leaving the strip for an awkward search later.
-// Tiles that few searches fully inside the level can reach (corners, narrow strips, pockets
-// between levels) count extra for the same reason.
+// For the same reason a tile counts extra when even the best search that could cover it would
+// cover little (a strip along a border, a corridor between searched areas, a corner); this is
+// recomputed after each pick, so slivers one search leaves pull the next one towards them.
 //
 // Distances are diamond-grid steps (Chebyshev distance in iso space), the same metric as the
 // 39×39 areas.
@@ -43,8 +44,8 @@ export const RUIN_QUOTA = 0.1;
 const SHARPNESS = 4;
 /** Half-size of a suggested search (39×39, like an X mark). */
 export const SEARCH_RADIUS = RANGE_RADIUS;
-/** Extra value of a tile that few searches can reach: up to +HARD_BONUS (0..1) for the hardest. */
-const HARD_BONUS = 0.5;
+/** Extra value of a tile whose best possible search is poor: up to +HARD_BONUS for the worst. */
+const HARD_BONUS = 1;
 /** Cost of a searched tile of another level, against a likely tile (1). */
 const SPILL_COST = 0.25;
 /** Most of a search that may land on other levels. */
@@ -132,6 +133,31 @@ function box(t: Float64Array, u: number, v: number, r = SEARCH_RADIUS): number {
   return t[a1 + b1 * M] - t[a0 + b1 * M] - t[a1 + b0 * M] + t[a0 + b0 * M];
 }
 
+/** dst = max of src over the box of radius r around each cell (rows, then columns; monotone deque). */
+function slidingMax(src: Float64Array, dst: Float64Array, tmp: Float64Array, r: number) {
+  const q = new Int32Array(N);
+  const pass = (from: Float64Array, to: Float64Array, stride: number, step: number) => {
+    for (let line = 0; line < N; line++) {
+      const base = line * stride;
+      let h = 0;
+      let t = 0;
+      for (let k = 0; k < N + r; k++) {
+        if (k < N) {
+          const x = from[base + k * step];
+          while (t > h && from[base + q[t - 1] * step] <= x) t--;
+          q[t++] = k;
+        }
+        const c = k - r;
+        if (c < 0) continue;
+        while (q[h] < c - r) h++;
+        to[base + c * step] = from[base + q[h] * step];
+      }
+    }
+  };
+  pass(src, tmp, N, 1);
+  pass(tmp, dst, 1, N);
+}
+
 /** Weight of a tile at distance d from the nearest find. */
 const WEIGHT = new Float64Array(256);
 for (let d = 0; d < 256; d++) WEIGHT[d] = 1 - Math.exp(-Math.pow(d / KEEP_AWAY, SHARPNESS));
@@ -211,20 +237,27 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     if (t < 0 || other[p] || !areaLevel[zoneArea[t]]) continue;
     spillOf[p] = level ? box(T, p % N, (p / N) | 0) : 0;
   }
-  // how many searches fully inside the level reach each tile; few = hard to reach, worth more now
-  const ok = new Uint8Array(N * N);
-  for (let p = 0; p < N * N; p++) ok[p] = spillOf[p] === 0 ? 1 : 0;
-  sat(ok, T);
-  const value = new Float64Array(N * N);
-  for (let p = 0; p < N * N; p++) {
-    if (!wt[p]) continue;
-    const reach = box(T, p % N, (p / N) | 0);
-    value[p] = wt[p] * (1 + HARD_BONUS * (1 - Math.min(1, reach / full)));
-  }
-
   const W = new Float64Array((N + 1) * (N + 1));
+  const yieldOf = new Float64Array(N * N); // what the search centred here would cover
+  const bestCover = new Float64Array(N * N); // best search that covers this tile
+  const tmp = new Float64Array(N * N);
+  const value = new Float64Array(N * N);
+  const allowed = (sp: number) => sp >= 0 && sp <= MAX_SPILL * full;
   const list: Suggestion[] = [];
   for (let n = 0; n < count; n++) {
+    // a tile whose best possible search is poor (a strip along a border, a corridor between
+    // searched areas, a corner) would need a wasteful search later: it counts extra now
+    sat(wt, W);
+    let top = 0;
+    for (let p = 0; p < N * N; p++) {
+      const sp = spillOf[p];
+      const y = allowed(sp) ? Math.max(0, box(W, p % N, (p / N) | 0) - SPILL_COST * sp) : 0;
+      yieldOf[p] = y;
+      if (y > top) top = y;
+    }
+    if (!top) break;
+    slidingMax(yieldOf, bestCover, tmp, SEARCH_RADIUS);
+    for (let p = 0; p < N * N; p++) value[p] = wt[p] ? wt[p] * (1 + HARD_BONUS * (1 - bestCover[p] / top)) : 0;
     sat(value, T);
     // best search within the spill limit; if none fits, the least bad one anywhere in the level
     let best = -1;
@@ -234,13 +267,12 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     for (let p = 0; p < N * N; p++) {
       const sp = spillOf[p];
       if (sp < 0) continue;
-      const s = box(T, p % N, (p / N) | 0) - SPILL_COST * sp;
-      if (sp <= MAX_SPILL * full && s > bestScore) (best = p), (bestScore = s);
-      if (s > anyScore) (any = p), (anyScore = s);
+      const sc = box(T, p % N, (p / N) | 0) - SPILL_COST * sp;
+      if (allowed(sp) && sc > bestScore) (best = p), (bestScore = sc);
+      if (sc > anyScore) (any = p), (anyScore = sc);
     }
     const p = best >= 0 ? best : any;
     if (p < 0) break;
-    sat(wt, W);
     const u = p % N;
     const v = (p - u) / N;
     const covers = box(W, u, v) / total;
@@ -252,7 +284,6 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     for (let b = Math.max(0, v - SEARCH_RADIUS); b <= Math.min(N - 1, v + SEARCH_RADIUS); b++) {
       for (let x = Math.max(0, u - SEARCH_RADIUS); x <= Math.min(N - 1, u + SEARCH_RADIUS); x++) {
         wt[x + b * N] = 0;
-        value[x + b * N] = 0;
       }
     }
   }
@@ -260,13 +291,19 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
 }
 
 let cacheKey = '';
+let cacheLevel = -1;
 let cache: SuggestionResult = { list: [], heat: new Uint8Array(0) };
 
-/** Cached suggestions; recomputed only when the marks or the level change. */
-export function getSuggestions(marks: Uint8Array, marked: Iterable<number>, marksRevision: number, level: number): SuggestionResult {
+/**
+ * Cached suggestions; recomputed only when the marks or the level change. While `busy` (a brush
+ * stroke in progress) the last result is kept, and it is recomputed once the stroke ends.
+ */
+export function getSuggestions(marks: Uint8Array, marked: Iterable<number>, marksRevision: number, level: number, busy = false): SuggestionResult {
   const key = `${marksRevision}|${level}`;
+  if (busy && cacheLevel === level) return cache;
   if (key !== cacheKey) {
     cacheKey = key;
+    cacheLevel = level;
     cache = computeSuggestions(marks, marked, level);
   }
   return cache;

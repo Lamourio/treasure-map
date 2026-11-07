@@ -395,6 +395,11 @@ export class Store {
     this.setTile(i, this.marks[i], text);
   }
 
+  /** True while a brush stroke is being painted. */
+  get stroking(): boolean {
+    return this.stroke !== null;
+  }
+
   beginStroke() {
     this.endStroke();
     if (this.settings.markLayers === 'shared') this.notify(SHARED_ONLY_MSG);
