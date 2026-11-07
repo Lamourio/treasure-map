@@ -20,10 +20,12 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 // area. Neither pushes drops away.
 //
 // Suggestions are 39×39 searches (the size of an X), picked greedily: each one covers the most
-// chance not covered by the ones before it. With a level chosen, a search must stay inside that
-// level (tiles off the map are fine), so no part of it is wasted on other levels. Tiles that few
-// such searches can reach (corners, narrow strips, pockets between levels) count extra, so they
-// get covered now instead of needing an awkward search later.
+// chance not covered by the ones before it. With a level chosen, a search should stay inside that
+// level (tiles off the map are fine): each tile it spends on another level costs SPILL_COST of a
+// likely tile, and at most MAX_SPILL of it may spill. So a search only pushes over the border
+// when that picks up a strip along it, instead of leaving the strip for an awkward search later.
+// Tiles that few searches fully inside the level can reach (corners, narrow strips, pockets
+// between levels) count extra for the same reason.
 //
 // Distances are diamond-grid steps (Chebyshev distance in iso space), the same metric as the
 // 39×39 areas.
@@ -43,6 +45,10 @@ const SHARPNESS = 4;
 export const SEARCH_RADIUS = RANGE_RADIUS;
 /** Extra value of a tile that few searches can reach: up to +HARD_BONUS (0..1) for the hardest. */
 const HARD_BONUS = 0.5;
+/** Cost of a searched tile of another level, against a likely tile (1). */
+const SPILL_COST = 0.25;
+/** Most of a search that may land on other levels. */
+const MAX_SPILL = 0.25;
 
 export const SUGGEST_COUNT = 5;
 
@@ -59,8 +65,8 @@ export interface Suggestion {
   gap: number;
   /** Known marks inside the area, by code (T, C, D, X). */
   found: Record<number, number>;
-  /** False when no search fits inside the level here, so this one also covers other levels. */
-  inside: boolean;
+  /** Share of the search on other levels' tiles, 0..1 (0 = fully inside the chosen level). */
+  spill: number;
 }
 
 export interface SuggestionResult {
@@ -195,20 +201,20 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
   }
   if (!total) return { list: [], heat };
 
-  // where a search may be centred: a tile of the level whose box holds no other level
+  // where a search may be centred: a tile of the level; spill = its box's tiles on other levels
+  const full = (2 * SEARCH_RADIUS + 1) ** 2;
   const T = new Float64Array((N + 1) * (N + 1));
   sat(other, T);
-  const centre = new Uint8Array(N * N); // 1 = allowed, 2 = in the level but spills over
+  const spillOf = new Int32Array(N * N).fill(-1); // -1 = not a centre
   for (let p = 0; p < N * N; p++) {
     const t = ISO_TILE[p];
     if (t < 0 || other[p] || !areaLevel[zoneArea[t]]) continue;
-    centre[p] = level && box(T, p % N, (p / N) | 0) > 0 ? 2 : 1;
+    spillOf[p] = level ? box(T, p % N, (p / N) | 0) : 0;
   }
-  // how many allowed searches reach each tile; few = hard to reach, worth more now
+  // how many searches fully inside the level reach each tile; few = hard to reach, worth more now
   const ok = new Uint8Array(N * N);
-  for (let p = 0; p < N * N; p++) ok[p] = centre[p] === 1 ? 1 : 0;
+  for (let p = 0; p < N * N; p++) ok[p] = spillOf[p] === 0 ? 1 : 0;
   sat(ok, T);
-  const full = (2 * SEARCH_RADIUS + 1) ** 2;
   const value = new Float64Array(N * N);
   for (let p = 0; p < N * N; p++) {
     if (!wt[p]) continue;
@@ -220,21 +226,19 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
   const list: Suggestion[] = [];
   for (let n = 0; n < count; n++) {
     sat(value, T);
+    // best search within the spill limit; if none fits, the least bad one anywhere in the level
     let best = -1;
     let bestScore = 0;
-    let spill = -1;
-    let spillScore = 0;
+    let any = -1;
+    let anyScore = -Infinity;
     for (let p = 0; p < N * N; p++) {
-      const c = centre[p];
-      if (!c) continue;
-      const s = box(T, p % N, (p / N) | 0);
-      if (c === 1 ? s > bestScore : s > spillScore) {
-        if (c === 1) (best = p), (bestScore = s);
-        else (spill = p), (spillScore = s);
-      }
+      const sp = spillOf[p];
+      if (sp < 0) continue;
+      const s = box(T, p % N, (p / N) | 0) - SPILL_COST * sp;
+      if (sp <= MAX_SPILL * full && s > bestScore) (best = p), (bestScore = s);
+      if (s > anyScore) (any = p), (anyScore = s);
     }
-    const inside = best >= 0;
-    const p = inside ? best : spill;
+    const p = best >= 0 ? best : any;
     if (p < 0) break;
     sat(wt, W);
     const u = p % N;
@@ -243,7 +247,7 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     const i = ISO_TILE[p];
     const area = zoneArea[i];
     const a = acc.get(area);
-    list.push({ i, covers, area, chance: a ? a.mass / total : 0, gap: a?.gap ?? 0, found: found.get(area) ?? {}, inside });
+    list.push({ i, covers, area, chance: a ? a.mass / total : 0, gap: a?.gap ?? 0, found: found.get(area) ?? {}, spill: spillOf[p] / full });
     // later searches only count what this one leaves
     for (let b = Math.max(0, v - SEARCH_RADIUS); b <= Math.min(N - 1, v + SEARCH_RADIUS); b++) {
       for (let x = Math.max(0, u - SEARCH_RADIUS); x <= Math.min(N - 1, u + SEARCH_RADIUS); x++) {

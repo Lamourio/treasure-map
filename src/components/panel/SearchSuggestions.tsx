@@ -57,10 +57,10 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
                   <span className="suggest-chance" title="Share of the chance this 39×39 search covers">
                     {pct(s.covers)}
                   </span>
-                  {!s.inside && (
-                    <span className="small error-text" title="No 39×39 search fits inside the level here">
+                  {s.spill >= 0.005 && (
+                    <span className="muted small" title="Part of this search lands on another level, to pick up a strip along the border">
                       {' '}
-                      spills over
+                      {pct(s.spill)} over the border
                     </span>
                   )}
                   <span className="small suggest-sub" title={`Parts of this area are ${s.gap} tiles from the nearest find`}>
@@ -78,7 +78,8 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
       <div className="muted small" style={{ marginTop: 8 }}>
         Finds keep about {KEEP_AWAY} tiles away from each other and ruins with fewer finds are a little more likely. Each row
         is a 39×39 search{suggestLevel ? ` kept inside ${levelName(suggestLevel)}` : ''}, best first; its % is the share of the
-        chance it covers that the ones above it don't. Spots few searches can reach (corners, narrow strips) count extra. If a
+        chance it covers that the ones above it don't. Spots few searches can reach (corners, narrow strips) count extra, and a
+        search may push a little over the border to pick up a strip along it. If a
         search turns up nothing, mark its centre X and the list updates. Follows the Both / Mine / Shared switch.
       </div>
     </div>
