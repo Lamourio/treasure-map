@@ -18,7 +18,7 @@ function pct(x: number): string {
 /** The best 39×39 searches for the next drop, in order (see lib/suggest.ts). */
 export function SearchSuggestions({ view }: { view: MapView | null }) {
   const store = useStore();
-  const { suggestLevel, showSuggestions } = store.settings;
+  const { suggestLevel, showSuggestions, showSearchBoxes } = store.settings;
   const { list } = getSuggestions(store.marks, store.marked, store.marksRevision, suggestLevel);
 
   const jump = (i: number) => {
@@ -40,9 +40,16 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
             ))}
           </select>
         </label>
-        <label className="check">
+      </div>
+      <div className="suggest-show">
+        <span className="muted small">Show on map</span>
+        <label className="check" title="Tint where the next drop can still be: stronger = more likely">
           <input type="checkbox" checked={showSuggestions} onChange={(e) => store.setSettings({ showSuggestions: e.target.checked })} />
-          Show on map
+          Heatmap
+        </label>
+        <label className="check" title="Outline the suggested 39×39 searches, numbered like the list">
+          <input type="checkbox" checked={showSearchBoxes} onChange={(e) => store.setSettings({ showSearchBoxes: e.target.checked })} />
+          Search boxes
         </label>
       </div>
       {list.length ? (

@@ -33,7 +33,8 @@ export interface Settings {
   showZones: boolean;
   showPins: boolean; // pins + clusters for marks and landmarks when zoomed out
   showRanges: boolean; // 39×39 square around each treasure and scrap tile
-  showSuggestions: boolean; // outline the suggested search spots on the map
+  showSuggestions: boolean; // heatmap of where the next drop can be
+  showSearchBoxes: boolean; // the suggested 39×39 searches with numbered badges
   suggestLevel: number; // zone level the suggestions are limited to (0 = any)
   brushSize: number; // brush radius in tiles: 0 = 1 tile, 1 = 3x3, 2 = 5x5, 4 = 9x9
   brushShape: 'brush' | 'box'; // freehand stamp, or drag a rectangle
@@ -139,6 +140,7 @@ function defaultSettings(): Settings {
     showPins: true,
     showRanges: true,
     showSuggestions: false,
+    showSearchBoxes: false,
     suggestLevel: 0,
     brushSize: 0,
     brushShape: 'brush',
@@ -849,6 +851,8 @@ export class Store {
         s.showCodes = fitCodes(s.showCodes);
         if (!['both', 'own', 'shared'].includes(s.markLayers)) s.markLayers = 'both';
         if (![0, 1, 2, 3, 4, 5, 6].includes(s.suggestLevel)) s.suggestLevel = 0;
+        // saved before the heatmap and the search boxes had separate switches: keep showing both
+        if (d.settings.showSearchBoxes === undefined) s.showSearchBoxes = !!s.showSuggestions;
         this.settings = s;
       }
     } catch {

@@ -854,14 +854,14 @@ export class MapView {
         ctx.stroke();
       }
       if (this.pinsActive) this.drawPins();
-      if (settings.showSuggestions) this.drawSuggestions(true); // numbered badges stay on top of pins
+      if (settings.showSearchBoxes) this.drawSuggestions(true); // boxes and numbered badges stay on top of pins
     }
     ctx.restore();
     this.drawRulers(c0, c1, r0, r1);
     this.positionCard();
   }
 
-  /** Heatmap of where the next drop can be (inside the map clip), or the numbered badges on top. */
+  /** Heatmap of where the next drop can be (inside the map clip), or the search boxes and numbered badges on top. */
   private drawSuggestions(badges: boolean) {
     const { ctx, store } = this;
     const res = getSuggestions(store.marks, store.marked, store.marksRevision, store.settings.suggestLevel);

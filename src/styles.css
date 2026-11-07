@@ -1510,6 +1510,16 @@ kbd {
   gap: 8px;
   flex-wrap: wrap;
 }
+.suggest-show {
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.suggest-show > span {
+  flex-basis: 100%;
+}
 .suggest-list {
   list-style: none;
   margin: 8px 0 0;
