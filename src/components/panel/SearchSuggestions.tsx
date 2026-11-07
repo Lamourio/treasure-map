@@ -1,15 +1,19 @@
 import { formatIndex } from '../../lib/coords';
 import { MapView } from '../../lib/mapView';
 import { MARKS } from '../../lib/marks';
-import { SEARCHED_CODES, getSuggestions } from '../../lib/suggest';
+import { DUG_CODE, FIND_CODES, KEEP_AWAY, getSuggestions } from '../../lib/suggest';
 import { useStore } from '../../lib/useStore';
 import { LEVELS, LEVEL_COLORS, areaLabels, levelName, zoneLevel } from '../../lib/zones';
 
-/** Ranks zone areas by how far they reach away from every treasure, scrap or dug tile. */
+function pct(x: number): string {
+  return x >= 0.995 ? '100%' : x >= 0.1 ? `${Math.round(x * 100)}%` : `${(x * 100).toFixed(1)}%`;
+}
+
+/** Ranks zone areas by their chance of holding the next drop (see lib/suggest.ts). */
 export function SearchSuggestions({ view }: { view: MapView | null }) {
   const store = useStore();
   const { suggestLevel, showSuggestions } = store.settings;
-  const list = getSuggestions(store.marks, store.marked, store.marksRevision, suggestLevel);
+  const { list } = getSuggestions(store.marks, store.marked, store.marksRevision, suggestLevel);
 
   const jump = (i: number) => {
     store.select(i);
@@ -44,13 +48,14 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
                 <span className="swatch" style={{ background: LEVEL_COLORS[zoneLevel[s.i]] }} />
                 <span className="suggest-text">
                   <b>{formatIndex(s.i)}</b>
+                  <span className="suggest-chance">{pct(s.chance)}</span>
                   <span className="muted small">
                     {' '}
                     area {areaLabels[s.area - 1] ? `${areaLabels[s.area - 1].x}:${areaLabels[s.area - 1].y}` : s.area}
                   </span>
                   <span className="small suggest-sub">
-                    {s.gap} tiles from any find ·{' '}
-                    {SEARCHED_CODES.map((c) => `${s.found[c] ?? 0} ${MARKS[c].letter}`).join(' ')}
+                    up to {s.gap} tiles from a find ·{' '}
+                    {[...FIND_CODES, DUG_CODE].map((c) => `${s.found[c] ?? 0} ${MARKS[c].letter}`).join(' ')}
                   </span>
                 </span>
               </button>
@@ -58,12 +63,12 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
           ))}
         </ol>
       ) : (
-        <div className="muted small">No empty patch left{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}.</div>
+        <div className="muted small">Nothing to suggest{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}.</div>
       )}
       <div className="muted small" style={{ marginTop: 8 }}>
-        Zone areas ranked by how far they reach from any {SEARCHED_CODES.map((c) => MARKS[c].letter).join(' / ')} mark (finds tend
-        to be spread out); the spot is the middle of the area's empty part. Mark searched spots D so they count. Follows the
-        Both / Mine / Shared switch.
+        Finds keep about {KEEP_AWAY} tiles away from each other, so each area's % is its share of the room left for the next
+        drop{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}. The heatmap shows where a drop can still be. Mark dug-empty
+        tiles D to rule them out. Follows the Both / Mine / Shared switch.
       </div>
     </div>
   );

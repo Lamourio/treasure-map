@@ -1,4 +1,4 @@
-import { getSuggestions, type Suggestion } from './suggest';
+import { getSuggestions, type Suggestion, type SuggestionResult } from './suggest';
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, toIndex } from './coords';
 import {
   ISO_SIZE,
@@ -148,6 +148,11 @@ export class MapView {
   private borderCanvas: HTMLCanvasElement;
   private rangeCanvas: HTMLCanvasElement;
   private rangeCtx: CanvasRenderingContext2D;
+  // search-suggestion heatmap (iso texture), rebuilt when the suggestions change
+  private heatCanvas: HTMLCanvasElement;
+  private heatCtx: CanvasRenderingContext2D;
+  private heatImg: ImageData;
+  private heatSource: SuggestionResult | null = null;
   private rangeImg: ImageData;
   private rangeEdgeCanvas: HTMLCanvasElement;
   private rangeEdgeCtx: CanvasRenderingContext2D;
@@ -196,6 +201,8 @@ export class MapView {
     this.zoneCanvas = this.buildZoneCanvas();
     this.borderCanvas = this.buildBorderCanvas();
     [this.rangeCanvas, this.rangeCtx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    [this.heatCanvas, this.heatCtx] = makeCanvas(ISO_SIZE, ISO_SIZE);
+    this.heatImg = this.heatCtx.createImageData(ISO_SIZE, ISO_SIZE);
     this.rangeImg = this.rangeCtx.createImageData(ISO_SIZE, ISO_SIZE);
     [this.rangeEdgeCanvas, this.rangeEdgeCtx] = makeCanvas(ISO_SIZE, ISO_SIZE);
     this.rangeEdgeImg = this.rangeEdgeCtx.createImageData(ISO_SIZE, ISO_SIZE);
@@ -854,25 +861,25 @@ export class MapView {
     this.positionCard();
   }
 
-  /** Suggested search spots: a dashed diamond over the empty part of the area, then (badges) a numbered dot. */
+  /** Heatmap of where the next drop can be (inside the map clip), or the numbered badges on top. */
   private drawSuggestions(badges: boolean) {
-    const { ctx, scale, store } = this;
-    const list = getSuggestions(store.marks, store.marked, store.marksRevision, store.settings.suggestLevel);
-    if (!list.length) return;
-    if (badges) return this.drawSuggestionBadges(list);
-    const unit = Math.SQRT2 / scale; // one screen pixel in iso units
-    this.setIsoTransform();
-    ctx.lineWidth = 2 * unit;
-    ctx.setLineDash([7 * unit, 5 * unit]);
-    ctx.strokeStyle = SUGGEST_COLOR;
-    ctx.fillStyle = 'rgba(255, 79, 216, 0.08)';
-    for (const s of list) {
-      const [u, v] = isoOf(s.i);
-      ctx.fillRect(u - s.radius, v - s.radius, 2 * s.radius + 1, 2 * s.radius + 1);
-      ctx.strokeRect(u - s.radius, v - s.radius, 2 * s.radius + 1, 2 * s.radius + 1);
+    const { ctx, store } = this;
+    const res = getSuggestions(store.marks, store.marked, store.marksRevision, store.settings.suggestLevel);
+    if (!res.list.length) return;
+    if (badges) return this.drawSuggestionBadges(res.list);
+    if (this.heatSource !== res) {
+      this.heatSource = res;
+      const px = new Uint32Array(this.heatImg.data.buffer);
+      const [r, g, bl] = hexToRgb(SUGGEST_COLOR);
+      for (let p = 0; p < px.length; p++) {
+        const w = res.heat[p];
+        // likely tiles get a stronger tint; tiles that can't hold a drop stay clear
+        px[p] = w ? packRgba(r, g, bl, Math.round(w * 0.5)) : 0;
+      }
+      this.heatCtx.putImageData(this.heatImg, 0, 0);
     }
-    ctx.setLineDash([]);
-    this.resetTransform();
+    ctx.imageSmoothingEnabled = false;
+    this.drawIso(this.heatCanvas);
   }
 
   private drawSuggestionBadges(list: Suggestion[]) {

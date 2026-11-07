@@ -3,27 +3,46 @@ import { ISO_SIZE, ISO_TILE, TILE_ISO } from './grid';
 import { MARK_C, MARK_D, MARK_T } from './marks';
 import { areaLevel, zoneArea, zoneLevel } from './zones';
 
-// "Where to search next": so far finds have been spread out across the map (more evenly than
-// random), so the zone areas with the biggest stretch away from every find are the best bets.
+// "Where to search next" as a small probability model.
+//
+// Finds keep away from each other: fitting simulated drops to the shared finds (101 on
+// 2026-11-07) gives a soft keep-away radius of about 33 tiles. A tile's weight for the next drop
+// is h(d) = 1 - exp(-(d / R)^4), with d its distance to the nearest find: ~0 right next to a
+// find, ~0.5 at 30 tiles, ~1 from about 45 tiles. Treasures and scrap showed the same spacing
+// (no extra treasure-treasure gap), so both count as finds. A dug-empty tile (D) only rules out
+// that tile. An area's chance is the share of the total weight that lies in it, so it grows with
+// both its size and how empty it is.
+//
 // Distances are diamond-grid steps (Chebyshev distance in iso space), the same metric as the
 // 39×39 areas.
 
-/** Marks that count as "this spot is known": treasure, scrap and dug (nothing). */
-export const SEARCHED_CODES: number[] = [MARK_T, MARK_C, MARK_D];
+/** Marks that push the next drop away. */
+export const FIND_CODES: number[] = [MARK_T, MARK_C];
+/** Dug, nothing there: only that tile is ruled out. */
+export const DUG_CODE = MARK_D;
+/** Fitted keep-away radius (tiles) and sharpness of the weight curve. */
+export const KEEP_AWAY = 33;
+const SHARPNESS = 4;
 
 export const SUGGEST_COUNT = 5;
 
 export interface Suggestion {
   /** Zone area id. */
   area: number;
-  /** Where to look: the most central tile of the area's empty part. */
+  /** Where to look: the most central of the area's most likely tiles. */
   i: number;
-  /** How far the area reaches away from any find, in tiles (the ranking score). */
+  /** Share of the chance for the next drop (within the chosen level) that falls in this area, 0..1. */
+  chance: number;
+  /** How far the area reaches away from any find, in tiles. */
   gap: number;
-  /** Radius of the empty diamond around `i` that stays inside the area and the map. */
-  radius: number;
   /** Known marks inside the area, by code (T, C, D). */
   found: Record<number, number>;
+}
+
+export interface SuggestionResult {
+  list: Suggestion[];
+  /** Weight 0..255 per iso cell (u + v * ISO_SIZE) for the chosen level; 0 elsewhere. */
+  heat: Uint8Array;
 }
 
 const N = ISO_SIZE;
@@ -61,26 +80,33 @@ function transform(dist: Int32Array) {
   }
 }
 
-/** Zone areas of one level (0 = any), best first: the area reaching farthest from any known mark. */
-export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, level: number, count = SUGGEST_COUNT): Suggestion[] {
-  // distance to the nearest known mark only (map edges and zone borders don't count)
+/** Weight of a tile at distance d from the nearest find. */
+const WEIGHT = new Float64Array(256);
+for (let d = 0; d < 256; d++) WEIGHT[d] = 1 - Math.exp(-Math.pow(d / KEEP_AWAY, SHARPNESS));
+const weightAt = (d: number) => (d < 256 ? WEIGHT[d] : 1);
+
+/** Zone areas of one level (0 = any), most likely first, plus the weight map. */
+export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, level: number, count = SUGGEST_COUNT): SuggestionResult {
+  const heat = new Uint8Array(N * N);
+  // distance to the nearest find
   const toFind = new Int32Array(N * N).fill(INF);
-  // distance to a known mark, the map edge or another area: how central a tile is in its empty part
+  // distance to a find, the map edge or another area: how central a tile is (picks the spot)
   const toEdge = new Int32Array(N * N);
   for (let p = 0; p < N * N; p++) toEdge[p] = ISO_TILE[p] < 0 ? 0 : INF;
   const found = new Map<number, Record<number, number>>();
-  let any = false;
+  let finds = 0;
   for (const i of marked) {
     const m = marks[i];
-    if (!SEARCHED_CODES.includes(m)) continue;
-    toFind[TILE_ISO[i]] = 0;
-    toEdge[TILE_ISO[i]] = 0;
-    any = true;
+    if (FIND_CODES.includes(m)) {
+      toFind[TILE_ISO[i]] = 0;
+      toEdge[TILE_ISO[i]] = 0;
+      finds++;
+    } else if (m !== DUG_CODE) continue;
     const f = found.get(zoneArea[i]) ?? {};
     f[m] = (f[m] ?? 0) + 1;
     found.set(zoneArea[i], f);
   }
-  if (!any) return [];
+  if (!finds) return { list: [], heat };
   // a tile next to another area is a border
   for (let p = 0; p < N * N; p++) {
     const t = ISO_TILE[p];
@@ -99,33 +125,42 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
   transform(toFind);
   transform(toEdge);
 
-  const best = new Map<number, { gap: number; i: number; edge: number; far: number }>();
+  type Acc = { mass: number; gap: number; i: number; w: number; edge: number };
+  const acc = new Map<number, Acc>();
+  let total = 0;
   for (let i = 0; i < TILE_COUNT; i++) {
     if (level && zoneLevel[i] !== level) continue;
-    const a = zoneArea[i];
     const p = TILE_ISO[i];
-    let b = best.get(a);
-    if (!b) best.set(a, (b = { gap: 0, i: -1, edge: -1, far: -1 }));
-    if (toFind[p] > b.gap) b.gap = toFind[p];
-    // spot: the most central empty tile; ties go to the one farther from finds
-    if (toEdge[p] > b.edge || (toEdge[p] === b.edge && toFind[p] > b.far)) {
+    const df = toFind[p];
+    const w = marks[i] === DUG_CODE ? 0 : weightAt(df);
+    heat[p] = Math.round(w * 255);
+    total += w;
+    const a = zoneArea[i];
+    let b = acc.get(a);
+    if (!b) acc.set(a, (b = { mass: 0, gap: 0, i: -1, w: -1, edge: -1 }));
+    b.mass += w;
+    if (df > b.gap) b.gap = df;
+    // spot: the most likely tiles (weight in 1% steps), the most central of those
+    const wq = Math.round(w * 100);
+    if (wq > b.w || (wq === b.w && toEdge[p] > b.edge)) {
       b.i = i;
+      b.w = wq;
       b.edge = toEdge[p];
-      b.far = toFind[p];
     }
   }
-  return [...best.entries()]
-    .filter(([a, b]) => areaLevel[a] && b.i >= 0)
-    .sort((x, y) => y[1].gap - x[1].gap)
+  const list = [...acc.entries()]
+    .filter(([a, b]) => areaLevel[a] && b.i >= 0 && b.mass > 0)
+    .sort((x, y) => y[1].mass - x[1].mass)
     .slice(0, count)
-    .map(([area, b]) => ({ area, i: b.i, gap: b.gap, radius: Math.max(0, b.edge - 1), found: found.get(area) ?? {} }));
+    .map(([area, b]) => ({ area, i: b.i, chance: total ? b.mass / total : 0, gap: b.gap, found: found.get(area) ?? {} }));
+  return { list, heat };
 }
 
 let cacheKey = '';
-let cache: Suggestion[] = [];
+let cache: SuggestionResult = { list: [], heat: new Uint8Array(0) };
 
 /** Cached suggestions; recomputed only when the marks or the level change. */
-export function getSuggestions(marks: Uint8Array, marked: Iterable<number>, marksRevision: number, level: number): Suggestion[] {
+export function getSuggestions(marks: Uint8Array, marked: Iterable<number>, marksRevision: number, level: number): SuggestionResult {
   const key = `${marksRevision}|${level}`;
   if (key !== cacheKey) {
     cacheKey = key;

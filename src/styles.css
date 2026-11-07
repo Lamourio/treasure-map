@@ -1537,3 +1537,8 @@ kbd {
   flex-basis: 100%;
   color: var(--muted);
 }
+.suggest-chance {
+  margin-left: auto;
+  font-weight: 700;
+  color: #ff4fd8;
+}
