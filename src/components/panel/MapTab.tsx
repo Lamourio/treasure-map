@@ -7,6 +7,7 @@ import { LEVELS, LEVEL_COLORS, levelName, tilesPerLevel } from '../../lib/zones'
 import { PinGlyph } from '../PinGlyph';
 import { DisplayOptions } from '../Stats';
 import { Group } from './Group';
+import { SearchSuggestions } from './SearchSuggestions';
 
 export function MapTab({ view }: { view: MapView | null }) {
   const store = useStore();
@@ -21,6 +22,9 @@ export function MapTab({ view }: { view: MapView | null }) {
         }
       >
         <DisplayOptions />
+      </Group>
+      <Group title="Where to search next" collapsibleId="suggest">
+        <SearchSuggestions view={view} />
       </Group>
       <Group title="Legend">
         <div className="subhead first">Zones</div>

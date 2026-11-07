@@ -15,6 +15,7 @@ There are two layers of marks:
   - Landmarks get bigger pins with their type's icon and their name.
   - Turn pins on or off under *Display & filters*.
 - **Treasure & scrap areas**: an optional 39×39-tile diamond centred on every T and C tile; overlapping areas merge into one outlined region (an indicator only). Turn it on or off in the **Map** tab.
+- **Where to search next** (Map tab): ranks zone areas by how far they reach from any treasure, scrap or dug (D) mark, optionally for one level, with the middle of each area's empty part as the spot to check. Click a row to jump there; **Show on map** outlines the spots with numbered badges. So far finds have been spread out more evenly than random, so big empty stretches are the best bets. Mark searched spots D so they count.
 - **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
 - **Lists and stats**: mark counts per zone level, plus clickable lists of marked tiles.
 - **Undo/redo**, filters, dim unmarked tiles, and a dark UI by default (follows the system light/dark setting).

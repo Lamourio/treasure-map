@@ -33,6 +33,8 @@ export interface Settings {
   showZones: boolean;
   showPins: boolean; // pins + clusters for marks and landmarks when zoomed out
   showRanges: boolean; // 39×39 square around each treasure and scrap tile
+  showSuggestions: boolean; // outline the suggested search spots on the map
+  suggestLevel: number; // zone level the suggestions are limited to (0 = any)
   brushSize: number; // brush radius in tiles: 0 = 1 tile, 1 = 3x3, 2 = 5x5, 4 = 9x9
   brushShape: 'brush' | 'box'; // freehand stamp, or drag a rectangle
   eraseCodes: boolean[]; // which mark codes the eraser removes (indexed by code)
@@ -136,6 +138,8 @@ function defaultSettings(): Settings {
     showZones: true,
     showPins: true,
     showRanges: true,
+    showSuggestions: false,
+    suggestLevel: 0,
     brushSize: 0,
     brushShape: 'brush',
     eraseCodes: new Array<boolean>(CODE_SLOTS).fill(true),
@@ -253,6 +257,8 @@ export class Store {
   private noticeId = 0;
 
   version = 0;
+  /** Bumped on every change of the shown marks (for caches keyed on the marks). */
+  marksRevision = 0;
   private listeners = new Set<(ev: StoreEvent) => void>();
   private undoStack: Op[] = [];
   private redoStack: Op[] = [];
@@ -279,6 +285,7 @@ export class Store {
 
   private emit(ev: StoreEvent, persist = true) {
     this.version++;
+    if (ev.type === 'marks') this.marksRevision++;
     for (const fn of this.listeners) fn(ev);
     if (persist) this.scheduleSave();
   }
@@ -841,6 +848,7 @@ export class Store {
         if (s.brushShape !== 'box') s.brushShape = 'brush';
         s.showCodes = fitCodes(s.showCodes);
         if (!['both', 'own', 'shared'].includes(s.markLayers)) s.markLayers = 'both';
+        if (![0, 1, 2, 3, 4, 5, 6].includes(s.suggestLevel)) s.suggestLevel = 0;
         this.settings = s;
       }
     } catch {

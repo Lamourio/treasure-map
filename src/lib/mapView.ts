@@ -1,3 +1,4 @@
+import { getSuggestions, type Suggestion } from './suggest';
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, toIndex } from './coords';
 import {
   ISO_SIZE,
@@ -29,6 +30,8 @@ export const RULER_TOP = 22;
 export const RULER_LEFT = 38;
 
 const MAX_SCALE = 96; // max tile width in CSS px
+/** Colour of the suggested search spots (not used by any mark or zone). */
+const SUGGEST_COLOR = '#ff4fd8';
 const VECTOR_BORDER_SCALE = 3.5; // draw borders as lines from here (below: darkened border tiles)
 const ZONE_LABEL_MAX_SCALE = 16;
 const GRID_SCALE = 12;
@@ -817,6 +820,7 @@ export class MapView {
       }
 
       if (settings.showRanges) this.drawRanges();
+      if (settings.showSuggestions) this.drawSuggestions(false);
       this.drawCrosshair(c0, c1, r0, r1);
       this.drawLandmarks(false);
 
@@ -843,10 +847,53 @@ export class MapView {
         ctx.stroke();
       }
       if (this.pinsActive) this.drawPins();
+      if (settings.showSuggestions) this.drawSuggestions(true); // numbered badges stay on top of pins
     }
     ctx.restore();
     this.drawRulers(c0, c1, r0, r1);
     this.positionCard();
+  }
+
+  /** Suggested search spots: a dashed diamond over the empty part of the area, then (badges) a numbered dot. */
+  private drawSuggestions(badges: boolean) {
+    const { ctx, scale, store } = this;
+    const list = getSuggestions(store.marks, store.marked, store.marksRevision, store.settings.suggestLevel);
+    if (!list.length) return;
+    if (badges) return this.drawSuggestionBadges(list);
+    const unit = Math.SQRT2 / scale; // one screen pixel in iso units
+    this.setIsoTransform();
+    ctx.lineWidth = 2 * unit;
+    ctx.setLineDash([7 * unit, 5 * unit]);
+    ctx.strokeStyle = SUGGEST_COLOR;
+    ctx.fillStyle = 'rgba(255, 79, 216, 0.08)';
+    for (const s of list) {
+      const [u, v] = isoOf(s.i);
+      ctx.fillRect(u - s.radius, v - s.radius, 2 * s.radius + 1, 2 * s.radius + 1);
+      ctx.strokeRect(u - s.radius, v - s.radius, 2 * s.radius + 1, 2 * s.radius + 1);
+    }
+    ctx.setLineDash([]);
+    this.resetTransform();
+  }
+
+  private drawSuggestionBadges(list: Suggestion[]) {
+    const { ctx, scale, ox, oy } = this;
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    list.forEach((s, n) => {
+      const [x, y] = tileCenter(s.i);
+      const sx = ox + x * scale;
+      const sy = oy + y * scale;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+      ctx.fillStyle = SUGGEST_COLOR;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(String(n + 1), sx, sy + 0.5);
+    });
   }
 
   /** Box being dragged, or the brush footprint under the mouse. */
