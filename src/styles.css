@@ -1483,6 +1483,12 @@ kbd {
 }
 .shared-info button {
   align-self: flex-start;
+  max-width: 100%;
+  height: auto;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  white-space: normal;
+  text-align: left;
 }
 
 .layer-row {

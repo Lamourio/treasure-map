@@ -53,9 +53,10 @@ export function DataPanel() {
         </div>
         {hidden > 0 && (
           <button
+            title="Your own marks on tiles that already have a shared mark: the shared mark is shown instead"
             onClick={() => setMsg({ kind: 'ok', text: `Removed ${store.removeHiddenOwnMarks()} of your marks hidden under shared marks.` })}
           >
-            Remove {hidden} own mark{hidden === 1 ? '' : 's'} hidden under shared marks
+            Remove {hidden} hidden own mark{hidden === 1 ? '' : 's'}
           </button>
         )}
       </div>
