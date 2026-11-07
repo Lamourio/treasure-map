@@ -833,7 +833,7 @@ kbd {
   top: 0;
   left: 0;
   z-index: 4;
-  width: 236px;
+  width: 268px;
   padding: 8px 10px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -866,13 +866,15 @@ kbd {
 
 .card-marks {
   display: grid;
-  grid-template-columns: repeat(4, 1fr) 30px;
+  /* one column per mark code (--codes, set by the component) plus the clear button */
+  grid-template-columns: repeat(var(--codes, 5), minmax(0, 1fr)) 28px;
   gap: 4px;
 }
 
 .card-marks button {
-  gap: 3px;
-  padding: 0 4px;
+  gap: 2px;
+  padding: 0 2px;
+  min-width: 0;
   font-weight: 700;
 }
 
@@ -1282,13 +1284,16 @@ kbd {
 
 .code-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--codes, 5), minmax(0, 1fr));
   gap: 4px;
   margin-bottom: 8px;
 }
 
 .code-tabs button {
-  gap: 6px;
+  gap: 3px;
+  padding-left: 2px;
+  padding-right: 2px;
+  min-width: 0;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -1508,6 +1513,10 @@ kbd {
   gap: 4px;
 }
 .suggest-list button {
+  white-space: normal;
+  height: auto;
+  padding-top: 5px;
+  padding-bottom: 5px;
   width: 100%;
   display: flex;
   align-items: center;

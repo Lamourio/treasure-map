@@ -2,7 +2,7 @@
 // Each part is filled/stroked with the foreground colour ("fg") or with the
 // pin colour ("bg", used to cut details out of a filled shape).
 
-export type PinIcon = 'chest' | 'gift' | 'question' | 'cross' | 'crown' | 'ruin' | 'castle' | 'flag' | 'star' | 'gem' | 'gear' | 'dot';
+export type PinIcon = 'chest' | 'gift' | 'question' | 'cross' | 'crown' | 'ruin' | 'castle' | 'flag' | 'star' | 'gem' | 'gear' | 'area' | 'dot';
 
 interface Part {
   d: string;
@@ -58,6 +58,10 @@ export const PIN_ICONS: Record<PinIcon, Part[]> = {
     { d: 'M12 5.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z', fill: 'fg' },
     { d: 'M12 9.4a2.6 2.6 0 1 0 0 5.2a2.6 2.6 0 1 0 0-5.2z', fill: 'bg' },
   ],
+  area: [
+    { d: 'M12 3.5 20.5 12 12 20.5 3.5 12z', stroke: 'fg', width: 2.6 },
+    { d: 'M12 9.5 14.5 12 12 14.5 9.5 12z', fill: 'fg' },
+  ],
   dot: [{ d: 'M12 6.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z', fill: 'fg' }],
 };
 
@@ -73,13 +77,14 @@ export const ICON_LABELS: Record<PinIcon, string> = {
   star: 'Star',
   gem: 'Gem',
   gear: 'Gear',
+  area: 'Area',
   dot: 'Dot',
 };
 
 export const LANDMARK_ICON_CHOICES: PinIcon[] = ['crown', 'ruin', 'castle', 'flag', 'star', 'gem', 'chest', 'dot'];
 
-/** Icon per mark code (T, R, D, S, C). */
-export const MARK_ICONS: Record<number, PinIcon> = { 1: 'chest', 2: 'gift', 3: 'cross', 4: 'question', 5: 'gear', 6: 'cross' };
+/** Icon per mark code (T, R, D, S, C, X). */
+export const MARK_ICONS: Record<number, PinIcon> = { 1: 'chest', 2: 'gift', 3: 'cross', 4: 'question', 5: 'gear', 6: 'area' };
 
 export function isPinIcon(v: unknown): v is PinIcon {
   return typeof v === 'string' && v in PIN_ICONS;

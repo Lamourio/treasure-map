@@ -5,6 +5,12 @@ import { DUG_CODE, EMPTY_AREA_CODE, FIND_CODES, KEEP_AWAY, getSuggestions } from
 import { useStore } from '../../lib/useStore';
 import { LEVELS, LEVEL_COLORS, areaLabels, levelName, zoneLevel } from '../../lib/zones';
 
+/** "2 T · 1 C", or "no marks" for an untouched area. */
+function foundText(found: Record<number, number>): string {
+  const parts = [...FIND_CODES, DUG_CODE, EMPTY_AREA_CODE].filter((c) => found[c]).map((c) => `${found[c]} ${MARKS[c].letter}`);
+  return parts.length ? parts.join(' · ') : 'no marks';
+}
+
 function pct(x: number): string {
   return x >= 0.995 ? '100%' : x >= 0.1 ? `${Math.round(x * 100)}%` : `${(x * 100).toFixed(1)}%`;
 }
@@ -53,9 +59,8 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
                     {' '}
                     area {areaLabels[s.area - 1] ? `${areaLabels[s.area - 1].x}:${areaLabels[s.area - 1].y}` : s.area}
                   </span>
-                  <span className="small suggest-sub">
-                    up to {s.gap} tiles from a find ·{' '}
-                    {[...FIND_CODES, DUG_CODE, EMPTY_AREA_CODE].map((c) => `${s.found[c] ?? 0} ${MARKS[c].letter}`).join(' ')}
+                  <span className="small suggest-sub" title={`Parts of this area are ${s.gap} tiles from the nearest find`}>
+                    {s.gap} tiles clear · {foundText(s.found)}
                   </span>
                 </span>
               </button>

@@ -135,7 +135,7 @@ function TileCard({ onJump }: { onJump: (i: number) => void }) {
           ×
         </button>
       </div>
-      <div className="card-marks" role="radiogroup" aria-label="Mark">
+      <div className="card-marks" role="radiogroup" aria-label="Mark" style={{ '--codes': MARK_CODES.length } as React.CSSProperties}>
         {MARK_CODES.map((c, n) => (
           <button
             key={c}

@@ -65,7 +65,7 @@ function MarkBrowser({ view }: { view: MapView | null }) {
         </button>
       }
     >
-      <div className="code-tabs" role="tablist" aria-label="Mark code">
+      <div className="code-tabs" role="tablist" aria-label="Mark code" style={{ '--codes': MARK_CODES.length } as React.CSSProperties}>
         {MARK_CODES.map((c) => (
           <button
             key={c}
