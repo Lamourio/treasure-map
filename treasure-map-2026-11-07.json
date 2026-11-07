@@ -1,7 +1,7 @@
 {
  "app": "treasure-hunt-map",
  "version": 1,
- "exportedAt": "2026-11-07T12:37:43.303Z",
+ "exportedAt": "2026-11-07T13:13:57.507Z",
  "coordinates": "game (X 3..509, Y 3..1021)",
  "marks": [
   {
@@ -82,6 +82,11 @@
   {
    "x": 232,
    "y": 96,
+   "code": "C"
+  },
+  {
+   "x": 342,
+   "y": 110,
    "code": "C"
   },
   {
