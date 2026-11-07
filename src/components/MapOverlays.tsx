@@ -154,9 +154,9 @@ export function FirstRunHint() {
     <div className="first-hint" role="dialog" aria-label="Getting started">
       <b>Getting started</b>
       <ul>
-        <li>Click or tap a tile to select it, then mark it from the card (or keys 1–4).</li>
+        <li>Click or tap a tile to select it, then mark it from the card (or keys 1–5).</li>
         <li>Drag to move. Wheel, pinch or double-click to zoom.</li>
-        <li>To mark many tiles at once, pick a brush (T C S D) in the toolbar.</li>
+        <li>To mark many tiles at once, pick a brush (T C S D X) in the toolbar.</li>
         <li>Type “123:456” in the Go box to jump to a tile.</li>
       </ul>
       <button className="primary" onClick={dismiss}>

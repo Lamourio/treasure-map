@@ -18,7 +18,7 @@ import {
   worldToIso,
 } from './grid';
 import { MARK_ICONS, PinIcon, drawIcon, readableOn } from './icons';
-import { CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, RANGE_RADIUS, isActiveMark } from './marks';
+import { CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, RANGE_EXTENT, isActiveMark } from './marks';
 import { typeIcon, type Store, type StoreEvent } from './store';
 import { LEVEL_COLORS, areaLabels, zoneArea, zoneLevel } from './zones';
 
@@ -1055,12 +1055,13 @@ export class MapView {
     RANGE_CODES.forEach((code, k) => {
       if (!show[code]) return;
       const bit = 1 << k;
+      const [lo, hi] = RANGE_EXTENT[code];
       for (const i of store.marked) {
         if (store.marks[i] !== code) continue;
         const [u, v] = isoOf(i);
-        const a0 = Math.max(0, u - RANGE_RADIUS);
-        const a1 = Math.min(N - 1, u + RANGE_RADIUS);
-        for (let b = Math.max(0, v - RANGE_RADIUS); b <= Math.min(N - 1, v + RANGE_RADIUS); b++) {
+        const a0 = Math.max(0, u - lo);
+        const a1 = Math.min(N - 1, u + hi);
+        for (let b = Math.max(0, v - lo); b <= Math.min(N - 1, v + hi); b++) {
           for (let a = a0; a <= a1; a++) bits[a + b * N] |= bit;
         }
       }

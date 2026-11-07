@@ -1,6 +1,6 @@
 import { MARK_ICONS } from '../lib/icons';
 import { PinGlyph } from './PinGlyph';
-import { CODE_SLOTS, MARKS, MARK_CODES, PIN_CODES, RANGE_CODES } from '../lib/marks';
+import { CODE_SLOTS, MARKS, MARK_CODES, PIN_CODES, RANGE_CODES, rangeSize } from '../lib/marks';
 import type { MarkLayers } from '../lib/store';
 import { useStore } from '../lib/useStore';
 
@@ -46,12 +46,12 @@ export function DisplayOptions() {
           ))}
         </span>
       </label>
-      <label className="check" title="Show the 39×39 area around each treasure and scrap tile, centred on it">
+      <label className="check" title="Show the area around each treasure and scrap tile (39×39) and each empty-area mark (38×38)">
         <input type="checkbox" checked={showRanges} onChange={(e) => store.setSettings({ showRanges: e.target.checked })} />
-        Treasure &amp; scrap areas (39×39)
+        Mark areas
         <span className="pin-legend">
           {RANGE_CODES.map((c) => (
-            <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={MARKS[c].name} />
+            <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={`${MARKS[c].name}: ${rangeSize(c)}×${rangeSize(c)}`} />
           ))}
         </span>
       </label>

@@ -7,7 +7,7 @@ import { MapView } from './lib/mapView';
 import { MARK_CODES, MarkCode } from './lib/marks';
 import { Tool, store } from './lib/store';
 
-const TOOL_KEYS: Record<string, Tool> = { v: 'select', t: 1, d: 3, s: 4, c: 5, e: 0 };
+const TOOL_KEYS: Record<string, Tool> = { v: 'select', t: 1, d: 3, s: 4, c: 5, x: 6, e: 0 };
 // number keys follow the order of the codes in use: 1 = T, 2 = C, 3 = S, 4 = D
 const MARK_KEYS: Record<string, MarkCode> = { '0': 0, delete: 0, backspace: 0 };
 MARK_CODES.forEach((c, n) => (MARK_KEYS[String(n + 1)] = c));

@@ -79,7 +79,7 @@ export const ICON_LABELS: Record<PinIcon, string> = {
 export const LANDMARK_ICON_CHOICES: PinIcon[] = ['crown', 'ruin', 'castle', 'flag', 'star', 'gem', 'chest', 'dot'];
 
 /** Icon per mark code (T, R, D, S, C). */
-export const MARK_ICONS: Record<number, PinIcon> = { 1: 'chest', 2: 'gift', 3: 'cross', 4: 'question', 5: 'gear' };
+export const MARK_ICONS: Record<number, PinIcon> = { 1: 'chest', 2: 'gift', 3: 'cross', 4: 'question', 5: 'gear', 6: 'cross' };
 
 export function isPinIcon(v: unknown): v is PinIcon {
   return typeof v === 'string' && v in PIN_ICONS;

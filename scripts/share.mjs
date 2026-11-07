@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const SHARED = 'src/data/shared.json';
-const LETTERS = ['T', 'C', 'S', 'D'];
+const LETTERS = ['T', 'C', 'S', 'D', 'X'];
 
 const args = process.argv.slice(2);
 const replace = args.includes('--replace');

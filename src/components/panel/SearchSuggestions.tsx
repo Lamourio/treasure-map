@@ -1,7 +1,7 @@
 import { formatIndex } from '../../lib/coords';
 import { MapView } from '../../lib/mapView';
 import { MARKS } from '../../lib/marks';
-import { DUG_CODE, FIND_CODES, KEEP_AWAY, getSuggestions } from '../../lib/suggest';
+import { DUG_CODE, EMPTY_AREA_CODE, FIND_CODES, KEEP_AWAY, getSuggestions } from '../../lib/suggest';
 import { useStore } from '../../lib/useStore';
 import { LEVELS, LEVEL_COLORS, areaLabels, levelName, zoneLevel } from '../../lib/zones';
 
@@ -55,7 +55,7 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
                   </span>
                   <span className="small suggest-sub">
                     up to {s.gap} tiles from a find ·{' '}
-                    {[...FIND_CODES, DUG_CODE].map((c) => `${s.found[c] ?? 0} ${MARKS[c].letter}`).join(' ')}
+                    {[...FIND_CODES, DUG_CODE, EMPTY_AREA_CODE].map((c) => `${s.found[c] ?? 0} ${MARKS[c].letter}`).join(' ')}
                   </span>
                 </span>
               </button>
@@ -68,7 +68,7 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
       <div className="muted small" style={{ marginTop: 8 }}>
         Finds keep about {KEEP_AWAY} tiles away from each other, so each area's % is its share of the room left for the next
         drop{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}. The heatmap shows where a drop can still be. Mark dug-empty
-        tiles D to rule them out. Follows the Both / Mine / Shared switch.
+        tiles D, or searched empty 38×38 areas X, to rule them out. Follows the Both / Mine / Shared switch.
       </div>
     </div>
   );

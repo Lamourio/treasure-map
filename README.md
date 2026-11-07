@@ -8,13 +8,13 @@ There are two layers of marks:
 
 - **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` as **diamonds in staggered rows**, like in the game. Rows with an even Y sit half a tile to the right, so the lower-right neighbour of 100:200 is 101:201, and of 101:201 is 101:202. Rows are half a tile apart, so the map is square.
 - **Zones**: 73 level areas (L1–L5) plus the King's Throne, converted from the zone map image.
-- **Marks**: T (treasure found), C (scrap), S (suspected), D (dug, nothing), each with an optional note.
+- **Marks**: T (treasure found), C (scrap), S (suspected), D (dug, nothing), X (searched 38×38 area, nothing in it), each with an optional note.
 - **Landmarks**: name, type, optional level, position and size, drawn on the map. Types, their colours and their icons (crown, ruin, castle, flag, star, gem, chest, dot) can be edited.
 - **Pins when zoomed out**:
   - When tiles get too small to read, Treasure (chest icon), Scrap (gear) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
   - Landmarks get bigger pins with their type's icon and their name.
   - Turn pins on or off under *Display & filters*.
-- **Treasure & scrap areas**: an optional 39×39-tile diamond centred on every T and C tile; overlapping areas merge into one outlined region (an indicator only). Turn it on or off in the **Map** tab.
+- **Mark areas**: an optional 39×39-tile diamond centred on every T and C tile, and a 38×38 diamond around every X tile (38 has no middle tile, so it reaches 19 tiles towards the top and 18 towards the bottom). Overlapping areas of the same mark merge into one outlined region (an indicator only). Turn it on or off in the **Map** tab.
 - **Where to search next** (Map tab): a small probability model for the next drop. Finds keep about 33 tiles away from each other (fitted to the shared finds; treasures and scrap follow the same rule), so each tile gets a weight from its distance to the nearest find, and each zone area gets a % chance: its share of that weight, optionally within one level. Bigger and emptier areas score higher. Click a row to jump to the area's most likely spot; **Show on map** draws a heatmap with numbered badges. Mark dug-empty tiles D to rule them out.
 - **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
 - **Lists and stats**: mark counts per zone level, plus clickable lists of marked tiles.
@@ -79,7 +79,7 @@ The panel has five tabs, each split into groups:
 | **Tile** | Go to X:Y; the selected tile (mark, note, zone, nearest landmark, distance and offset, **Copy** X:Y); recent jumps |
 | **Marks** | Marked-tile browser for one code at a time, with a zone filter, note search, sorting by position or by distance from the selected tile, and **Copy list** (paste it into game chat); **Paste coordinates** to mark a whole list in one step; progress by zone |
 | **Landmarks** | Search, filter by type, sort by name or by distance from the selected tile; add, edit and delete; landmark types (colour, icon, name) |
-| **Map** | Marks from **Both / Mine / Shared**; zones, pins, treasure & scrap areas (39×39), dimming and which mark codes to show; legend |
+| **Map** | Marks from **Both / Mine / Shared**; zones, pins, mark areas (T/C 39×39, X 38×38), dimming and which mark codes to show; legend |
 | **More** | Export and import (backup and sharing); how to use |
 
 ## Using the map
@@ -87,8 +87,8 @@ The panel has five tabs, each split into groups:
 | Action | Mouse | Touch |
 | --- | --- | --- |
 | Select a tile (opens its card) | click or right-click; click again to deselect | tap; tap again to deselect |
-| Mark the selected tile | card buttons, or keys `1` `2` `3` `4` (T/C/S/D) and `0`/`Delete` to clear | card buttons |
-| Paint with a brush (pick T/C/S/D/eraser in the toolbar) | click / drag; size 1/3/5/9 or **Box** (drag a rectangle) in the banner | tap / drag |
+| Mark the selected tile | card buttons, or keys `1`–`5` (T/C/S/D/X) and `0`/`Delete` to clear | card buttons |
+| Paint with a brush (pick T/C/S/D/X/eraser in the toolbar) | click / drag; size 1/3/5/9 or **Box** (drag a rectangle) in the banner | tap / drag |
 | Erase while a brush is active | right-drag | pick the eraser |
 | Pan | drag (Select tool), or middle-drag / Space+drag with a brush | one-finger drag (Select tool), two fingers |
 | Zoom | wheel or double-click (Shift+wheel pans sideways) | pinch or double-tap |
@@ -102,7 +102,7 @@ Clicking a tile only selects it and never changes its mark. With a tile selected
 
 The **Go to X:Y** box in the toolbar jumps to a tile even when the side panel is closed. Every change shows a toast with **Undo**. While a brush is active, a banner on the map shows which one, with a **Done** button.
 
-Keyboard: `V` select tool, `T` `C` `S` `D` brushes, `E` eraser, `Esc` back to Select (or close the card), `F` fit map, `Z` zones on/off, `P` side panel, `+`/`-` zoom, `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`) undo/redo.
+Keyboard: `V` select tool, `T` `C` `S` `D` `X` brushes, `E` eraser, `Esc` back to Select (or close the card), `F` fit map, `Z` zones on/off, `P` side panel, `+`/`-` zoom, `Ctrl+Z` / `Ctrl+Y` (or `Ctrl+Shift+Z`) undo/redo.
 
 Selecting a tile (by clicking it, using **Go**, or picking one from a list) shows its mark, note, zone level, nearest landmark, distance and offset in the Finder. Typing or pasting `123:456` (or `123 456`, `123,456`) into either coordinate box fills both. Coordinates outside 3–509 / 3–1021 are rejected.
 

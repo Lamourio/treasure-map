@@ -1,6 +1,6 @@
 import { TILE_COUNT } from './coords';
 import { ISO_SIZE, ISO_TILE, TILE_ISO } from './grid';
-import { MARK_C, MARK_D, MARK_T } from './marks';
+import { MARK_C, MARK_D, MARK_T, MARK_X, RANGE_EXTENT } from './marks';
 import { areaLevel, zoneArea, zoneLevel } from './zones';
 
 // "Where to search next" as a small probability model.
@@ -10,7 +10,7 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 // is h(d) = 1 - exp(-(d / R)^4), with d its distance to the nearest find: ~0 right next to a
 // find, ~0.5 at 30 tiles, ~1 from about 45 tiles. Treasures and scrap showed the same spacing
 // (no extra treasure-treasure gap), so both count as finds. A dug-empty tile (D) only rules out
-// that tile. An area's chance is the share of the total weight that lies in it, so it grows with
+// that tile; an empty-area mark (X) rules out its whole 38×38 area. Neither pushes drops away. An area's chance is the share of the total weight that lies in it, so it grows with
 // both its size and how empty it is.
 //
 // Distances are diamond-grid steps (Chebyshev distance in iso space), the same metric as the
@@ -20,6 +20,8 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 export const FIND_CODES: number[] = [MARK_T, MARK_C];
 /** Dug, nothing there: only that tile is ruled out. */
 export const DUG_CODE = MARK_D;
+/** Searched 38×38 area with nothing in it: every tile of the area is ruled out. */
+export const EMPTY_AREA_CODE = MARK_X;
 /** Fitted keep-away radius (tiles) and sharpness of the weight curve. */
 export const KEEP_AWAY = 33;
 const SHARPNESS = 4;
@@ -94,6 +96,8 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
   const toEdge = new Int32Array(N * N);
   for (let p = 0; p < N * N; p++) toEdge[p] = ISO_TILE[p] < 0 ? 0 : INF;
   const found = new Map<number, Record<number, number>>();
+  // tiles known to be empty: D tiles and every tile of an X area
+  const empty = new Uint8Array(N * N);
   let finds = 0;
   for (const i of marked) {
     const m = marks[i];
@@ -101,7 +105,17 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
       toFind[TILE_ISO[i]] = 0;
       toEdge[TILE_ISO[i]] = 0;
       finds++;
-    } else if (m !== DUG_CODE) continue;
+    } else if (m === DUG_CODE) {
+      empty[TILE_ISO[i]] = 1;
+    } else if (m === EMPTY_AREA_CODE) {
+      const [lo, hi] = RANGE_EXTENT[m];
+      const p = TILE_ISO[i];
+      const u = p % N;
+      const v = (p - u) / N;
+      for (let b = Math.max(0, v - lo); b <= Math.min(N - 1, v + hi); b++) {
+        for (let a = Math.max(0, u - lo); a <= Math.min(N - 1, u + hi); a++) empty[a + b * N] = 1;
+      }
+    } else continue;
     const f = found.get(zoneArea[i]) ?? {};
     f[m] = (f[m] ?? 0) + 1;
     found.set(zoneArea[i], f);
@@ -132,7 +146,7 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     if (level && zoneLevel[i] !== level) continue;
     const p = TILE_ISO[i];
     const df = toFind[p];
-    const w = marks[i] === DUG_CODE ? 0 : weightAt(df);
+    const w = empty[p] ? 0 : weightAt(df);
     heat[p] = Math.round(w * 255);
     total += w;
     const a = zoneArea[i];

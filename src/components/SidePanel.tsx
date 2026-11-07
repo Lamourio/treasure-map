@@ -131,7 +131,7 @@ function Help() {
         <kbd>←↑↓→</kbd> move to the next tile (<kbd>Shift</kbd> = 10 tiles), <kbd>N</kbd> / <kbd>Shift+N</kbd> jump to the next / previous tile with the same mark, <kbd>Esc</kbd> closes the card.
       </li>
       <li>
-        To mark many tiles, pick a <b>brush</b> (T/C/S/D/eraser) in the toolbar. The banner on the map sets the size (1, 3, 5
+        To mark many tiles, pick a <b>brush</b> (T/C/S/D/X/eraser) in the toolbar. The banner on the map sets the size (1, 3, 5
         or 9 tiles) or <b>Box</b> to drag a rectangle; the eraser can be limited to some codes. <b>Right-drag</b> erases
         with any brush. Pan with the middle mouse button, <b>Space+drag</b>, or two fingers. <kbd>Esc</kbd> goes back to Select.
       </li>
