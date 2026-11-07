@@ -71,8 +71,8 @@ export function SearchSuggestions({ view }: { view: MapView | null }) {
         <div className="muted small">Nothing to suggest{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}.</div>
       )}
       <div className="muted small" style={{ marginTop: 8 }}>
-        Finds keep about {KEEP_AWAY} tiles away from each other, so each area's % is its share of the room left for the next
-        drop{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}. The heatmap shows where a drop can still be. Mark dug-empty
+        Finds keep about {KEEP_AWAY} tiles away from each other and ruins with fewer finds are a little more likely, so each
+        area's % is its share of the room left for the next drop{suggestLevel ? ` in ${levelName(suggestLevel)}` : ''}. The heatmap shows where a drop can still be. Mark dug-empty
         tiles D, or searched empty 39×39 areas X, to rule them out. Follows the Both / Mine / Shared switch.
       </div>
     </div>

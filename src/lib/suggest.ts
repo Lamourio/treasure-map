@@ -5,11 +5,16 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 
 // "Where to search next" as a small probability model.
 //
-// Finds keep away from each other: fitting simulated drops to the shared finds (101 on
-// 2026-11-07) gives a soft keep-away radius of about 33 tiles. A tile's weight for the next drop
+// Finds keep away from each other: fitting simulated drops to the shared finds (107 on
+// 2026-11-07) gives a soft keep-away radius of about 39 tiles. A tile's weight for the next drop
 // is h(d) = 1 - exp(-(d / R)^4), with d its distance to the nearest find: ~0 right next to a
-// find, ~0.5 at 30 tiles, ~1 from about 45 tiles. Treasures and scrap showed the same spacing
-// (no extra treasure-treasure gap), so both count as finds. A dug-empty tile (D) only rules out
+// find, ~0.5 at 36 tiles, ~1 from about 55 tiles. Treasures and scrap showed the same spacing
+// (no extra treasure-treasure gap), so both count as finds.
+//
+// Finds are also spread a little more evenly over the ruins than spacing alone explains, so a
+// ruin's weight is multiplied by exp(-RUIN_QUOTA * finds already in it) (~10% less per find).
+// Fitted on all levels at once (per-ruin chi-square, empty ruins and nearest-neighbour distance);
+// the effect is weak, larger values make ruins far more even than observed. A dug-empty tile (D) only rules out
 // that tile; an empty-area mark (X) rules out its whole 39×39 area. Neither pushes drops away.
 // An area's chance is the share of the total weight that lies in it, so it grows with both its
 // size and how empty it is.
@@ -24,7 +29,9 @@ export const DUG_CODE = MARK_D;
 /** Searched 39×39 area with nothing in it: every tile of the area is ruled out. */
 export const EMPTY_AREA_CODE = MARK_X;
 /** Fitted keep-away radius (tiles) and sharpness of the weight curve. */
-export const KEEP_AWAY = 33;
+export const KEEP_AWAY = 39;
+/** Fitted per-find penalty of a ruin: its weight is multiplied by exp(-RUIN_QUOTA * finds in it). */
+export const RUIN_QUOTA = 0.1;
 const SHARPNESS = 4;
 
 export const SUGGEST_COUNT = 5;
@@ -122,6 +129,14 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     found.set(zoneArea[i], f);
   }
   if (!finds) return { list: [], heat };
+  const ruinFactor = (a: number) => {
+    const f = found.get(a);
+    let k = 0;
+    if (f) for (const c of FIND_CODES) k += f[c] ?? 0;
+    return Math.exp(-RUIN_QUOTA * k);
+  };
+  const factor = new Float64Array(256);
+  for (let a = 0; a < 256; a++) factor[a] = ruinFactor(a);
   // a tile next to another area is a border
   for (let p = 0; p < N * N; p++) {
     const t = ISO_TILE[p];
@@ -147,10 +162,10 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     if (level && zoneLevel[i] !== level) continue;
     const p = TILE_ISO[i];
     const df = toFind[p];
-    const w = empty[p] ? 0 : weightAt(df);
+    const a = zoneArea[i];
+    const w = empty[p] ? 0 : weightAt(df) * factor[a];
     heat[p] = Math.round(w * 255);
     total += w;
-    const a = zoneArea[i];
     let b = acc.get(a);
     if (!b) acc.set(a, (b = { mass: 0, gap: 0, i: -1, w: -1, edge: -1 }));
     b.mass += w;
