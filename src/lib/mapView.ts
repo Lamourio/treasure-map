@@ -1,4 +1,4 @@
-import { getSuggestions, type Suggestion, type SuggestionResult } from './suggest';
+import { SEARCH_RADIUS, getSuggestions, type Suggestion, type SuggestionResult } from './suggest';
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, toIndex } from './coords';
 import {
   ISO_SIZE,
@@ -884,6 +884,17 @@ export class MapView {
 
   private drawSuggestionBadges(list: Suggestion[]) {
     const { ctx, scale, ox, oy } = this;
+    // the 39×39 search around each suggestion
+    this.setIsoTransform();
+    ctx.lineWidth = 2 * (Math.SQRT2 / scale);
+    ctx.strokeStyle = SUGGEST_COLOR;
+    ctx.setLineDash([6 * (Math.SQRT2 / scale), 4 * (Math.SQRT2 / scale)]);
+    for (const s of list) {
+      const [u, v] = isoOf(s.i);
+      ctx.strokeRect(u - SEARCH_RADIUS, v - SEARCH_RADIUS, 2 * SEARCH_RADIUS + 1, 2 * SEARCH_RADIUS + 1);
+    }
+    ctx.setLineDash([]);
+    this.resetTransform();
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
