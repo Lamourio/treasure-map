@@ -109,7 +109,9 @@ export const NOTE_MAX = 200;
 export const MAX_SIZE = 50;
 const HISTORY_LIMIT = 300;
 const RECENT_LIMIT = 12;
-const STORAGE_KEY = 'treasure-map:v1';
+/** Every key this app writes to localStorage starts with this. */
+const STORAGE_PREFIX = 'treasure-map:';
+const STORAGE_KEY = `${STORAGE_PREFIX}v1`;
 const EXPORT_APP = 'treasure-hunt-map';
 const SHARED_ONLY_MSG = 'Showing shared marks only - switch to Both or Mine (Map tab) to edit your marks';
 
@@ -795,13 +797,37 @@ export class Store {
 
   // ----------------------------------------------------------- persistence
 
+  /** Set once everything local was wiped: nothing may be saved again before the reload. */
+  private wiped = false;
+
+  /**
+   * Deletes everything this app keeps in the browser (own marks, notes, landmarks, settings,
+   * panel state) and reloads. Shared marks come with the site and stay.
+   */
+  clearLocalData() {
+    this.wiped = true;
+    window.clearTimeout(this.saveTimer);
+    try {
+      const keys: string[] = [];
+      for (let k = 0; k < localStorage.length; k++) {
+        const key = localStorage.key(k);
+        if (key?.startsWith(STORAGE_PREFIX)) keys.push(key);
+      }
+      for (const key of keys) localStorage.removeItem(key);
+    } catch {
+      // storage unavailable: nothing was kept anyway
+    }
+    window.location.reload();
+  }
+
   private scheduleSave() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this.wiped) return;
     window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => this.flushSave(), 400);
   }
 
   flushSave() {
+    if (this.wiped) return;
     window.clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
     const prevError = this.saveError;

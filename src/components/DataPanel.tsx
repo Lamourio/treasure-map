@@ -99,6 +99,30 @@ export function DataPanel() {
           )}
         </div>
       )}
+      <div className="danger-zone">
+        <button
+          className="danger"
+          onClick={() => {
+            const n = store.local.reduce((s, m) => s + (m ? 1 : 0), 0);
+            if (
+              confirm(
+                [
+                  'Delete ALL your local data from this browser?',
+                  '',
+                  `• ${n} own mark${n === 1 ? '' : 's'} and their notes`,
+                  '• your landmarks (back to the defaults)',
+                  '• settings and panel layout',
+                  '',
+                  'Shared marks stay. This cannot be undone - export a backup first if you may need it.',
+                ].join('\n'),
+              )
+            )
+              store.clearLocalData();
+          }}
+        >
+          Clear all local data…
+        </button>
+      </div>
       {store.saveError ? (
         <div className="error">{store.saveError}</div>
       ) : (

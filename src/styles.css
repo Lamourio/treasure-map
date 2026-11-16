@@ -105,6 +105,15 @@ button.danger,
   color: var(--danger);
 }
 
+.danger-zone {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.danger-zone button {
+  width: 100%;
+}
+
 button.link {
   border: none;
   background: none;
