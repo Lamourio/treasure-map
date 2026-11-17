@@ -37,7 +37,9 @@ for (const m of input.marks) {
   const x = Number(m.x);
   const y = Number(m.y);
   const code = String(m.code ?? '').toUpperCase();
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 3 || x > 509 || y < 3 || y > 1021 || !LETTERS.includes(code)) {
+  // only X + Y even are tiles in the game
+  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 3 || x > 509 || y < 3 || y > 1021 || (x + y) % 2 || !LETTERS.includes(code)) {
+    if ((x + y) % 2) console.warn(`skipped ${x}:${y}: not a tile in the game (X + Y must be even)`);
     skipped++;
     continue;
   }

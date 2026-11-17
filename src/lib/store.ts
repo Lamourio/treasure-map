@@ -1,4 +1,4 @@
-import { TILE_COUNT, formatIndex, indexX, indexY, isValidCoord, toIndex } from './coords';
+import { TILE_COUNT, formatIndex, indexX, indexY, coordError, isTile, isValidCoord, toIndex } from './coords';
 import { PinIcon, isPinIcon } from './icons';
 import { CODE_SLOTS, MARKS, MarkCode, markFromLetter } from './marks';
 import { zoneLevel } from './zones';
@@ -361,6 +361,10 @@ export class Store {
 
   /** Sets the visitor's own mark on a tile (0 = remove it). Shared tiles are left alone. */
   setTile(i: number, mark: number, note: string | undefined = this.localNotes.get(i)) {
+    if (!isTile(i) && mark) {
+      if (!this.stroke) this.notify(`${formatIndex(i)} is not a tile in the game`);
+      return;
+    }
     if (this.shared[i]) {
       // brushes simply skip shared tiles; a direct edit says why nothing happened
       if (!this.stroke) this.notify(`${formatIndex(i)} is a shared mark - read-only`);
@@ -636,7 +640,7 @@ export class Store {
     if (!indices.length) return;
     const label = code ? `Marked ${indices.length} tiles ${MARKS[code].letter}` : `Cleared ${indices.length} tiles`;
     if (this.settings.markLayers === 'shared') return this.notify(SHARED_ONLY_MSG);
-    indices = indices.filter((i) => !this.shared[i]);
+    indices = indices.filter((i) => !this.shared[i] && (isTile(i) || !code));
     if (!indices.length) return;
     this.bulk(label, () => {
       for (const i of indices) {
@@ -644,6 +648,26 @@ export class Store {
         if (!code) this.localNotes.delete(i);
       }
     });
+  }
+
+  /** Own marks on X:Y pairs that are not tiles in the game (X + Y odd), saved before the app knew. Not drawn. */
+  offGridOwnMarks(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < TILE_COUNT; i++) if (this.local[i] && !isTile(i)) out.push(i);
+    return out;
+  }
+
+  /** Drops the own marks returned by offGridOwnMarks (one undoable step). */
+  removeOffGridOwnMarks(): number {
+    const list = this.offGridOwnMarks();
+    if (!list.length) return 0;
+    this.bulk(`Removed ${list.length} own marks on non-tiles`, () => {
+      for (const i of list) {
+        this.local[i] = 0;
+        this.localNotes.delete(i);
+      }
+    });
+    return list.length;
   }
 
   /** Own marks on tiles that now have a shared mark (hidden, e.g. after the shared map caught up). */
@@ -770,7 +794,7 @@ export class Store {
       data.marks.forEach((m: any, n: number) => {
         const x = Number(m?.x);
         const y = Number(m?.y);
-        if (!isValidCoord(x, y)) return warn(`mark #${n + 1} skipped (invalid coordinates ${m?.x}:${m?.y})`);
+        if (!isValidCoord(x, y)) return warn(`mark #${n + 1} at ${m?.x}:${m?.y} skipped (${coordError(x, y) ?? 'invalid coordinates'})`);
         const code = parseMarkCode(m.code);
         if (!code) return warn(`mark #${n + 1} at ${x}:${y} skipped (unknown code "${m.code}")`);
         const i = toIndex(x, y);

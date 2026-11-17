@@ -25,23 +25,16 @@ export const PIN_CODES: number[] = [1, 5, 4];
 /** Codes that get an area drawn around them (when enabled). */
 export const RANGE_CODES: number[] = [1, 5, 6];
 
-/** Half-size of the areas in diamond steps: 39×39 tiles centred on the marked tile. */
+/**
+ * Half-size of the areas: every tile with X and Y within ±19 of the marked tile, a 39×39 box of
+ * coordinates (as measured in the game around 490:230: X 471..509, Y 211..249). T, C and X all
+ * cover the same area.
+ */
 export const RANGE_RADIUS = 19;
 
-/**
- * Extent of each code's area in diamond steps from the marked tile: [towards the top, towards the
- * bottom]. T, C and X all cover the same 39×39 area centred on the tile.
- */
-export const RANGE_EXTENT: Record<number, [number, number]> = {
-  1: [RANGE_RADIUS, RANGE_RADIUS],
-  5: [RANGE_RADIUS, RANGE_RADIUS],
-  6: [RANGE_RADIUS, RANGE_RADIUS],
-};
-
-/** Side of a code's area in tiles (39). */
-export function rangeSize(code: number): number {
-  const [a, b] = RANGE_EXTENT[code];
-  return a + b + 1;
+/** Side of a code's area in coordinates (39). */
+export function rangeSize(_code: number): number {
+  return 2 * RANGE_RADIUS + 1;
 }
 
 export function isActiveMark(code: number): boolean {

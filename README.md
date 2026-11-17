@@ -6,7 +6,7 @@ There are two layers of marks:
 - **Shared marks** ship with the site from [`src/data/shared.json`](src/data/shared.json). Every visitor sees them, and nobody can change them in the app; only a code change and a deploy can. Use them to publish the latest finds to everyone.
 - **Your own marks** are saved in your browser's `localStorage`, as before. They can go on any tile that has no shared mark. Export and import JSON files for backups and sharing.
 
-- **Map**: 507 × 1019 tiles (X 3–509, Y 3–1021), drawn on a `<canvas>` as **diamonds in staggered rows**, like in the game. Rows with an even Y sit half a tile to the right, so the lower-right neighbour of 100:200 is 101:201, and of 101:201 is 101:202. Rows are half a tile apart, so the map is square.
+- **Map**: X 3–509, Y 3–1021, drawn on a `<canvas>` like in the game: only coordinates with an **even X + Y** are tiles (about 258,000). Tiles are diamonds twice as wide as tall that touch at (X±1, Y±1), so 5:11 sits above 4:12 and 6:12, which sit above 5:13; 5:12 does not exist. Typing or pasting a non-tile (X + Y odd) is refused with the tiles around it, and imports skip them. Marks saved on non-tiles before this was known are listed under **More → Backup & data** to remove.
 - **Zones**: 73 level areas (L1–L5) plus the King's Throne, converted from the zone map image.
 - **Marks**: T (treasure found), C (scrap), S (suspected), D (dug, nothing), X (searched 39×39 area, nothing in it), each with an optional note.
 - **Landmarks**: name, type, optional level, position and size, drawn on the map. Types, their colours and their icons (crown, ruin, castle, flag, star, gem, chest, dot) can be edited.
@@ -14,8 +14,8 @@ There are two layers of marks:
   - When tiles get too small to read, Treasure (chest icon), Scrap (gear) and Suspected (?) tiles become map pins. Nearby pins group into a bubble with a count badge; click it to zoom in. Click a single pin to jump to that tile.
   - Landmarks get bigger pins with their type's icon and their name.
   - Turn pins on or off under *Display & filters*.
-- **Mark areas**: an optional 39×39-tile diamond centred on every T, C and X tile. Overlapping areas of the same mark merge into one outlined region (an indicator only). Turn it on or off in the **Map** tab.
-- **Where to search next** (Map tab): a small probability model for the next drop. Finds keep about 39 tiles away from each other (fitted to the shared finds; treasures and scrap follow the same rule), so each tile gets a weight from its distance to the nearest find, and each ruin's weight drops about 10% per find already in it (finds spread slightly more evenly over ruins than spacing alone explains), and the list gives the best 39×39 searches in order: each covers the most chance the ones above it leave (the % shown), stays inside the chosen level (off-map is fine; it may push a little over the border to pick up a strip along it), and counts tiles extra when even the best search that could cover them would cover little (strips along a border, corridors between searched areas, corners), so they are taken along instead of left for a wasteful search later. Each row also shows its zone area's overall chance. Click a row to jump there; **Show on map** has separate switches for the **Heatmap** and the **Search boxes** (with numbered badges). Mark dug-empty tiles D, or a searched empty box X (on its centre), to rule them out.
+- **Mark areas**: an optional 39×39 area around every T, C and X tile: every tile with X and Y within ±19 of it (around 490:230 that is X 471–509, Y 211–249, as measured in the game), so a rectangle twice as wide as tall on screen. Overlapping areas of the same mark merge into one outlined region (an indicator only). Turn it on or off in the **Map** tab.
+- **Where to search next** (Map tab): a small probability model for the next drop. Finds keep about 33 tiles away from each other, counted like the areas as max(|ΔX|, |ΔY|) (fitted to the shared finds; treasures and scrap follow the same rule), so each tile gets a weight from its distance to the nearest find, and each ruin's weight drops about 14% per find already in it (finds spread slightly more evenly over ruins than spacing alone explains), and the list gives the best 39×39 searches in order: each covers the most chance the ones above it leave (the % shown), stays inside the chosen level (off-map is fine; it may push a little over the border to pick up a strip along it), and counts tiles extra when even the best search that could cover them would cover little (strips along a border, corridors between searched areas, corners), so they are taken along instead of left for a wasteful search later. Each row also shows its zone area's overall chance. Click a row to jump there; **Show on map** has separate switches for the **Heatmap** and the **Search boxes** (with numbered badges). Mark dug-empty tiles D, or a searched empty box X (on its centre), to rule them out.
 - **Finder**: jump to `X:Y`, highlight the tile with a crosshair, and see the nearest landmark, Chebyshev distance and offset.
 - **Lists and stats**: mark counts per zone level, plus clickable lists of marked tiles.
 - **Undo/redo**, filters, dim unmarked tiles, and a dark UI by default (follows the system light/dark setting).
@@ -96,7 +96,7 @@ The panel has five tabs, each split into groups:
 
 Clicking a tile only selects it and never changes its mark. With a tile selected:
 
-- The arrow keys move the selection (`Shift` moves 10 tiles).
+- The arrow keys move the selection to the next tile straight left, right, up or down (X or Y ±2, since only X + Y even are tiles; `Shift` moves 10 tiles).
 - `N` / `Shift+N` (or the ‹ › buttons in the card) step through the tiles with the same mark, for example every Suspected tile in turn.
 - `Esc` closes the card.
 
@@ -131,7 +131,7 @@ Both can be undone. Entries with invalid coordinates (below 3 or beyond the map)
 
 - Marks are two `Uint8Array(507 × 1019)` layers, shared and own; the map shows shared ‖ own. Codes: (0 = none, 1 = T, 2 = R (hidden for now), 3 = D, 4 = S, 5 = C) plus a `Map<index, note>`. The index is `(Y − 3) × 507 + (X − 3)`.
 - `localStorage` stores your own marks run-length encoded under the key `treasure-map:v1`. Saves are debounced and also flushed when the page is hidden.
-- Rendering ([`src/lib/grid.ts`](src/lib/grid.ts), [`src/lib/mapView.ts`](src/lib/mapView.ts)): turned by 45°, the staggered diamonds form a plain square grid. Zone colours, zone borders, marks and the treasure / scrap areas are cached in offscreen canvases in that grid, one pixel per tile, and drawn with a rotating transform, so each pixel lands on its diamond. Each frame draws only the visible part, plus grid lines, letters, vector borders and landmarks for the visible tiles. A frame costs a few milliseconds.
+- Rendering ([`src/lib/grid.ts`](src/lib/grid.ts), [`src/lib/mapView.ts`](src/lib/mapView.ts)): turned by 45°, the diamonds form a plain square grid ((X + Y) / 2, (Y − X) / 2), drawn with a transform that squashes each cell into a 2:1 diamond. Zone colours, zone borders, marks and the treasure / scrap areas are cached in offscreen canvases in that grid, one pixel per tile, and drawn with a rotating transform, so each pixel lands on its diamond. Each frame draws only the visible part, plus grid lines, letters, vector borders and landmarks for the visible tiles. A frame costs a few milliseconds.
 
 ## Regenerating the zone grid
 

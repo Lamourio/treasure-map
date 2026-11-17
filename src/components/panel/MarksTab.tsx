@@ -161,7 +161,7 @@ function PasteCoords() {
         {parsed.invalid.length > 0 && (
           <span className="error-text">
             {' '}
-            · {parsed.invalid.length} outside the map ({parsed.invalid.slice(0, 3).join(', ')}
+            · {parsed.invalid.length} not a tile (outside the map or X + Y odd: {parsed.invalid.slice(0, 3).join(', ')}
             {parsed.invalid.length > 3 ? '…' : ''})
           </span>
         )}

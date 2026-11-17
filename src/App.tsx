@@ -36,14 +36,16 @@ export function App() {
       if (e.altKey) return;
       const sel = store.selected;
 
-      // selected tile: arrows move it, 1-4 mark it, 0/Delete clears it
+      // selected tile: arrows move it to the next tile straight left / right / up / down (X or Y
+      // ±2: tiles only exist where X + Y is even), Shift for 10 tiles; 1-5 mark it, 0/Delete clears it
       if (key in ARROWS && sel !== null) {
         e.preventDefault();
         const [dx, dy] = ARROWS[key];
-        const step = e.shiftKey ? 10 : 1;
-        const x = Math.min(MAX_X, Math.max(MIN_X, indexX(sel) + dx * step));
-        const y = Math.min(MAX_Y, Math.max(MIN_Y, indexY(sel) + dy * step));
-        const i = toIndex(x, y);
+        let step = e.shiftKey ? 20 : 2;
+        const ok = (x: number, y: number) => x >= MIN_X && x <= MAX_X && y >= MIN_Y && y <= MAX_Y;
+        while (step > 0 && !ok(indexX(sel) + dx * step, indexY(sel) + dy * step)) step -= 2;
+        if (!step) return;
+        const i = toIndex(indexX(sel) + dx * step, indexY(sel) + dy * step);
         store.select(i);
         view?.ensureVisible(i);
         return;

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { formatIndex } from '../lib/coords';
 import { useStore } from '../lib/useStore';
 
 type Message = { kind: 'ok' | 'error'; text: string; details?: string[] };
@@ -39,6 +40,7 @@ export function DataPanel() {
 
   const info = store.sharedInfo;
   const hidden = store.hiddenOwnMarks().length;
+  const offGrid = store.offGridOwnMarks();
 
   return (
     <div className="data-panel">
@@ -60,6 +62,20 @@ export function DataPanel() {
           </button>
         )}
       </div>
+      {offGrid.length > 0 && (
+        <div className="error">
+          {offGrid.length} of your marks {offGrid.length === 1 ? 'is' : 'are'} on coordinates that are not tiles in the game (X + Y
+          odd): {offGrid.slice(0, 8).map(formatIndex).join(', ')}
+          {offGrid.length > 8 ? '…' : ''}. They are not shown on the map. Re-mark them on a real tile next to them, then remove these.
+          <button
+            className="wide small-btn"
+            style={{ marginTop: 6 }}
+            onClick={() => setMsg({ kind: 'ok', text: `Removed ${store.removeOffGridOwnMarks()} marks on non-tiles.` })}
+          >
+            Remove {offGrid.length} mark{offGrid.length === 1 ? '' : 's'} on non-tiles
+          </button>
+        </div>
+      )}
       <div className="row">
         <button className="primary" onClick={exportJson}>
           Export JSON
