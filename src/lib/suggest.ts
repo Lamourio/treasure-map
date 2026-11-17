@@ -1,12 +1,12 @@
 import { COLS, ROWS, TILE_COUNT, isTile } from './coords';
-import { MARK_C, MARK_D, MARK_T, MARK_X, RANGE_RADIUS } from './marks';
+import { AREA_STEPS, MARK_C, MARK_D, MARK_T, MARK_X } from './marks';
+import { ISO_SIZE, ISO_TILE, TILE_ISO, areaTiles } from './grid';
 import { areaLevel, zoneArea, zoneLevel } from './zones';
 
 // "Where to search next" as a small probability model.
 //
-// Distances are counted the way the game's 39×39 areas are: max(|ΔX|, |ΔY|), so an area is every
-// tile within 19 of its centre. All work happens on the plain X/Y grid (one cell per coordinate
-// pair, the tile index); pairs that are not tiles (X + Y odd) carry no weight.
+// Distances between finds are max(|ΔX|, |ΔY|): the spacing of the shared finds fits that better
+// than a diamond distance. Areas and searches are the game's 39×39 diamond (see marks.ts).
 //
 // Finds keep away from each other: fitting simulated drops to the shared finds (107 of
 // 2026-11-07) gives a keep-away radius of about 33 tiles with a steep edge. A tile's weight for the
@@ -42,8 +42,6 @@ export const KEEP_AWAY = 33;
 /** Fitted per-find penalty of a ruin: its weight is multiplied by exp(-RUIN_QUOTA * finds in it). */
 export const RUIN_QUOTA = 0.15;
 const SHARPNESS = 8;
-/** Half-size of a suggested search (39×39, like an X mark). */
-export const SEARCH_RADIUS = RANGE_RADIUS;
 /** Extra value of a tile whose best possible search is poor: up to +HARD_BONUS for the worst. */
 const HARD_BONUS = 1;
 /** Cost of a searched tile of another level, against a likely tile (1). */
@@ -112,38 +110,51 @@ export function chebyshevTransform(dist: Int32Array) {
   }
 }
 
-/** Summed-area table of a W×H grid, (W+1)×(H+1), for O(1) box sums. */
+// Sums over a search use the iso grid (see grid.ts), where an area is a square of 2·steps+1 cells
+// without its 4 corner cells, so a summed-area table gives each one in O(1).
+const N = ISO_SIZE;
+const K = AREA_STEPS;
+
+/** Summed-area table of an N×N iso array, (N+1)×(N+1). */
 function sat(src: ArrayLike<number>, out: Float64Array) {
-  const M = W + 1;
-  for (let r = 0; r < H; r++) {
+  const M = N + 1;
+  for (let v = 0; v < N; v++) {
     let row = 0;
-    for (let c = 0; c < W; c++) {
-      row += src[c + r * W];
-      out[c + 1 + (r + 1) * M] = out[c + 1 + r * M] + row;
+    for (let u = 0; u < N; u++) {
+      row += src[u + v * N];
+      out[u + 1 + (v + 1) * M] = out[u + 1 + v * M] + row;
     }
   }
 }
 
-/** Sum over the search box centred on cell (c, r), clipped to the grid. */
-function box(t: Float64Array, c: number, r: number, rad = SEARCH_RADIUS): number {
-  const M = W + 1;
-  const a0 = Math.max(0, c - rad);
-  const a1 = Math.min(W, c + rad + 1);
-  const b0 = Math.max(0, r - rad);
-  const b1 = Math.min(H, r + rad + 1);
-  return t[a1 + b1 * M] - t[a0 + b1 * M] - t[a1 + b0 * M] + t[a0 + b0 * M];
+/** Sum of src over the area centred on iso cell (u, v): the square from the table minus the 4 corner cells. */
+function areaSum(t: Float64Array, src: ArrayLike<number>, u: number, v: number): number {
+  const M = N + 1;
+  const a0 = Math.max(0, u - K);
+  const a1 = Math.min(N, u + K + 1);
+  const b0 = Math.max(0, v - K);
+  const b1 = Math.min(N, v + K + 1);
+  let s = t[a1 + b1 * M] - t[a0 + b1 * M] - t[a1 + b0 * M] + t[a0 + b0 * M];
+  for (const du of [-K, K]) {
+    for (const dv of [-K, K]) {
+      const a = u + du;
+      const b = v + dv;
+      if (a >= 0 && a < N && b >= 0 && b < N) s -= src[a + b * N];
+    }
+  }
+  return s;
 }
 
-/** dst = max of src over the box of radius rad around each cell (rows, then columns; monotone deque). */
+/** dst = max of src over the square of radius rad around each iso cell (rows, then columns; monotone deque). */
 function slidingMax(src: Float64Array, dst: Float64Array, tmp: Float64Array, rad: number) {
-  const q = new Int32Array(Math.max(W, H));
-  const pass = (from: Float64Array, to: Float64Array, lines: number, len: number, stride: number, step: number) => {
-    for (let line = 0; line < lines; line++) {
+  const q = new Int32Array(N);
+  const pass = (from: Float64Array, to: Float64Array, stride: number, step: number) => {
+    for (let line = 0; line < N; line++) {
       const base = line * stride;
       let h = 0;
       let t = 0;
-      for (let k = 0; k < len + rad; k++) {
-        if (k < len) {
+      for (let k = 0; k < N + rad; k++) {
+        if (k < N) {
           const x = from[base + k * step];
           while (t > h && from[base + q[t - 1] * step] <= x) t--;
           q[t++] = k;
@@ -155,8 +166,8 @@ function slidingMax(src: Float64Array, dst: Float64Array, tmp: Float64Array, rad
       }
     }
   };
-  pass(src, tmp, H, W, W, 1); // along rows
-  pass(tmp, dst, W, H, 1, W); // along columns
+  pass(src, tmp, N, 1);
+  pass(tmp, dst, 1, N);
 }
 
 /** Weight of a tile at distance d from the nearest find. */
@@ -164,17 +175,13 @@ const WEIGHT = new Float64Array(256);
 for (let d = 0; d < 256; d++) WEIGHT[d] = 1 - Math.exp(-Math.pow(d / KEEP_AWAY, SHARPNESS));
 const weightAt = (d: number) => (d < 256 ? WEIGHT[d] : 1);
 
-/** Real tiles in a full search box (a 39×39 box of coordinates holds 761 tiles around a tile). */
-const FULL = (() => {
-  let n = 0;
-  for (let dr = -SEARCH_RADIUS; dr <= SEARCH_RADIUS; dr++) for (let dc = -SEARCH_RADIUS; dc <= SEARCH_RADIUS; dc++) if (!((dc + dr) & 1)) n++;
-  return n;
-})();
+/** Tiles in a full search (the area: 21 × 21 diagonal tiles without the 4 tips = 437). */
+const FULL = (2 * K + 1) ** 2 - 4;
 
 /** The best 39×39 searches in one level (0 = any), in order, plus the weight map. */
 export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, level: number, count = SUGGEST_COUNT): SuggestionResult {
   const heat = new Uint8Array(TILE_COUNT);
-  // distance to the nearest find
+  // distance to the nearest find, max(|ΔX|, |ΔY|), on the X/Y grid
   const toFind = new Int32Array(TILE_COUNT).fill(INF);
   const found = new Map<number, Record<number, number>>();
   // tiles known to be empty: D tiles and every tile of an X area
@@ -189,11 +196,7 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     } else if (m === DUG_CODE) {
       empty[i] = 1;
     } else if (m === EMPTY_AREA_CODE) {
-      const c = i % W;
-      const r = (i - c) / W;
-      for (let b = Math.max(0, r - RANGE_RADIUS); b <= Math.min(H - 1, r + RANGE_RADIUS); b++) {
-        empty.fill(1, b * W + Math.max(0, c - RANGE_RADIUS), b * W + Math.min(W - 1, c + RANGE_RADIUS) + 1);
-      }
+      for (const j of areaTiles(i, K)) empty[j] = 1;
     } else continue;
     const f = found.get(zoneArea[i]) ?? {};
     f[m] = (f[m] ?? 0) + 1;
@@ -210,21 +213,22 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     factor[a] = Math.exp(-RUIN_QUOTA * k);
   }
 
-  // weight per tile (chosen level only), per-area totals
-  const wt = new Float64Array(TILE_COUNT);
-  const other = new Uint8Array(TILE_COUNT); // tile of another level
+  // weight per tile (chosen level only) in iso cells, per-area totals
+  const wt = new Float64Array(N * N);
+  const other = new Uint8Array(N * N); // tile of another level
   const acc = new Map<number, { mass: number; gap: number }>();
   let total = 0;
   for (let i = 0; i < TILE_COUNT; i++) {
     if (!isTile(i)) continue;
+    const p = TILE_ISO[i];
     if (level && zoneLevel[i] !== level) {
-      other[i] = 1;
+      other[p] = 1;
       continue;
     }
     const a = zoneArea[i];
     const df = toFind[i];
     const w = empty[i] ? 0 : weightAt(df) * factor[a];
-    wt[i] = w;
+    wt[p] = w;
     heat[i] = Math.round(w * 255);
     total += w;
     let b = acc.get(a);
@@ -234,21 +238,23 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
   }
   if (!total) return { list: [], heat };
 
-  // where a search may be centred: a tile of the level; spill = its box's tiles on other levels
-  const T = new Float64Array((W + 1) * (H + 1));
+  // where a search may be centred: a tile of the level; spill = its area's tiles on other levels
+  const T = new Float64Array((N + 1) * (N + 1));
   sat(other, T);
-  const spillOf = new Int32Array(TILE_COUNT).fill(-1); // -1 = not a centre
+  const spillOf = new Int32Array(N * N).fill(-1); // per iso cell; -1 = not a centre
   for (let i = 0; i < TILE_COUNT; i++) {
-    if (!isTile(i) || other[i] || !areaLevel[zoneArea[i]]) continue;
-    const c = i % W;
-    spillOf[i] = level ? box(T, c, (i - c) / W) : 0;
+    if (!isTile(i) || !areaLevel[zoneArea[i]]) continue;
+    const p = TILE_ISO[i];
+    if (other[p]) continue;
+    const u = p % N;
+    spillOf[p] = level ? areaSum(T, other, u, (p - u) / N) : 0;
   }
 
-  const S = new Float64Array((W + 1) * (H + 1));
-  const yieldOf = new Float64Array(TILE_COUNT); // what the search centred here would cover
-  const bestCover = new Float64Array(TILE_COUNT); // best search that covers this tile
-  const tmp = new Float64Array(TILE_COUNT);
-  const value = new Float64Array(TILE_COUNT);
+  const S = new Float64Array((N + 1) * (N + 1));
+  const yieldOf = new Float64Array(N * N); // what the search centred here would cover
+  const bestCover = new Float64Array(N * N); // best search that covers this tile (square around it)
+  const tmp = new Float64Array(N * N);
+  const value = new Float64Array(N * N);
   const allowed = (sp: number) => sp >= 0 && sp <= MAX_SPILL * FULL;
   const list: Suggestion[] = [];
   for (let n = 0; n < count; n++) {
@@ -256,45 +262,43 @@ export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, 
     // searched areas, a corner) would need a wasteful search later: it counts extra now
     sat(wt, S);
     let top = 0;
-    for (let i = 0; i < TILE_COUNT; i++) {
-      const sp = spillOf[i];
+    for (let p = 0; p < N * N; p++) {
+      const sp = spillOf[p];
       let y = 0;
       if (allowed(sp)) {
-        const c = i % W;
-        y = Math.max(0, box(S, c, (i - c) / W) - SPILL_COST * sp);
+        const u = p % N;
+        y = Math.max(0, areaSum(S, wt, u, (p - u) / N) - SPILL_COST * sp);
       }
-      yieldOf[i] = y;
+      yieldOf[p] = y;
       if (y > top) top = y;
     }
     if (!top) break;
-    slidingMax(yieldOf, bestCover, tmp, SEARCH_RADIUS);
-    for (let i = 0; i < TILE_COUNT; i++) value[i] = wt[i] ? wt[i] * (1 + HARD_BONUS * (1 - bestCover[i] / top)) : 0;
+    slidingMax(yieldOf, bestCover, tmp, K);
+    for (let p = 0; p < N * N; p++) value[p] = wt[p] ? wt[p] * (1 + HARD_BONUS * (1 - bestCover[p] / top)) : 0;
     sat(value, T);
     // best search within the spill limit; if none fits, the least bad one anywhere in the level
     let best = -1;
     let bestScore = 0;
     let any = -1;
     let anyScore = -Infinity;
-    for (let i = 0; i < TILE_COUNT; i++) {
-      const sp = spillOf[i];
+    for (let p = 0; p < N * N; p++) {
+      const sp = spillOf[p];
       if (sp < 0) continue;
-      const c = i % W;
-      const sc = box(T, c, (i - c) / W) - SPILL_COST * sp;
-      if (allowed(sp) && sc > bestScore) (best = i), (bestScore = sc);
-      if (sc > anyScore) (any = i), (anyScore = sc);
+      const u = p % N;
+      const sc = areaSum(T, value, u, (p - u) / N) - SPILL_COST * sp;
+      if (allowed(sp) && sc > bestScore) (best = p), (bestScore = sc);
+      if (sc > anyScore) (any = p), (anyScore = sc);
     }
-    const i = best >= 0 ? best : any;
-    if (i < 0) break;
-    const c = i % W;
-    const r = (i - c) / W;
-    const covers = box(S, c, r) / total;
+    const p = best >= 0 ? best : any;
+    if (p < 0) break;
+    const u = p % N;
+    const covers = areaSum(S, wt, u, (p - u) / N) / total;
+    const i = ISO_TILE[p];
     const area = zoneArea[i];
     const a = acc.get(area);
-    list.push({ i, covers, area, chance: a ? a.mass / total : 0, gap: a?.gap ?? 0, found: found.get(area) ?? {}, spill: spillOf[i] / FULL });
+    list.push({ i, covers, area, chance: a ? a.mass / total : 0, gap: a?.gap ?? 0, found: found.get(area) ?? {}, spill: spillOf[p] / FULL });
     // later searches only count what this one leaves
-    for (let b = Math.max(0, r - SEARCH_RADIUS); b <= Math.min(H - 1, r + SEARCH_RADIUS); b++) {
-      wt.fill(0, b * W + Math.max(0, c - SEARCH_RADIUS), b * W + Math.min(W - 1, c + SEARCH_RADIUS) + 1);
-    }
+    for (const j of areaTiles(i, K)) wt[TILE_ISO[j]] = 0;
   }
   return { list, heat };
 }

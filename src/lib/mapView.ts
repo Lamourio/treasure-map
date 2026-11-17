@@ -1,4 +1,4 @@
-import { SEARCH_RADIUS, getSuggestions, type Suggestion, type SuggestionResult } from './suggest';
+import { getSuggestions, type Suggestion, type SuggestionResult } from './suggest';
 import { COLS, MAX_X, MAX_Y, MIN_X, MIN_Y, ROWS, TILE_COUNT, isTile, toIndex } from './coords';
 import {
   ISO_SIZE,
@@ -6,7 +6,7 @@ import {
   NO_ISO,
   TILE_HH,
   TILE_HW,
-  boxTiles,
+  areaTiles,
   isoMatrix,
   isoPx,
   MAP_X0,
@@ -24,7 +24,7 @@ import {
   worldToIso,
 } from './grid';
 import { MARK_ICONS, PinIcon, drawIcon, readableOn } from './icons';
-import { CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, RANGE_RADIUS, isActiveMark } from './marks';
+import { AREA_STEPS, CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, isActiveMark } from './marks';
 import { typeIcon, type Store, type StoreEvent } from './store';
 import { LEVEL_COLORS, areaLabels, zoneArea, zoneLevel } from './zones';
 
@@ -892,18 +892,34 @@ export class MapView {
 
   private drawSuggestionBadges(list: Suggestion[]) {
     const { ctx, scale, ox, oy } = this;
-    // the 39×39 search around each suggestion: X and Y within ±19, drawn along the middle of its
-    // zigzag edge (edge tiles stick out half a tile on every other row)
-    const hw = (SEARCH_RADIUS + TILE_HW / 2) * scale;
-    const hh = (SEARCH_RADIUS / 2 + TILE_HH / 2) * scale;
-    ctx.lineWidth = 2;
+    // the 39×39 search around each suggestion: the area's diamond, traced along its tile edges in
+    // iso cells (a square of 2·steps+1 cells without its 4 corner cells)
+    const k = AREA_STEPS;
+    this.setIsoTransform();
+    ctx.lineWidth = 2 * isoPx(scale);
     ctx.strokeStyle = SUGGEST_COLOR;
-    ctx.setLineDash([6, 4]);
+    ctx.setLineDash([6 * isoPx(scale), 4 * isoPx(scale)]);
     for (const s of list) {
-      const [x, y] = tileCenter(s.i);
-      ctx.strokeRect(ox + x * scale - hw, oy + y * scale - hh, 2 * hw, 2 * hh);
+      const [u, v] = isoOf(s.i);
+      const a0 = u - k, a1 = u + k + 1, b0 = v - k, b1 = v + k + 1;
+      ctx.beginPath();
+      ctx.moveTo(a0 + 1, b0);
+      ctx.lineTo(a1 - 1, b0);
+      ctx.lineTo(a1 - 1, b0 + 1);
+      ctx.lineTo(a1, b0 + 1);
+      ctx.lineTo(a1, b1 - 1);
+      ctx.lineTo(a1 - 1, b1 - 1);
+      ctx.lineTo(a1 - 1, b1);
+      ctx.lineTo(a0 + 1, b1);
+      ctx.lineTo(a0 + 1, b1 - 1);
+      ctx.lineTo(a0, b1 - 1);
+      ctx.lineTo(a0, b0 + 1);
+      ctx.lineTo(a0 + 1, b0 + 1);
+      ctx.closePath();
+      ctx.stroke();
     }
     ctx.setLineDash([]);
+    this.resetTransform();
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1076,7 +1092,7 @@ export class MapView {
       const bit = 1 << k;
       for (const i of store.marked) {
         if (store.marks[i] !== code || !isTile(i)) continue;
-        for (const j of boxTiles(i, RANGE_RADIUS)) bits[TILE_ISO[j]] |= bit;
+        for (const j of areaTiles(i, AREA_STEPS)) bits[TILE_ISO[j]] |= bit;
       }
     });
     const colors = RANGE_CODES.map((c) => packRgba(...hexToRgb(MARKS[c].color)));
@@ -1104,7 +1120,7 @@ export class MapView {
     this.rangeEdgeCtx.putImageData(this.rangeEdgeImg, 0, 0);
   }
 
-  /** 39×39 area (X and Y within ±19) around each T, C and X tile; overlapping areas merge into one outlined region. */
+  /** 39×39 area (diamond, see marks.ts) around each T, C and X tile; overlapping areas merge into one outlined region. */
   private drawRanges() {
     const { ctx, scale, store } = this;
     // rebuild only when treasure / scrap tiles changed, and not in the middle of a stroke

@@ -51,7 +51,7 @@ export function DisplayOptions() {
         Mark areas
         <span className="pin-legend">
           {RANGE_CODES.map((c) => (
-            <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={`${MARKS[c].name}: ${rangeSize(c)}×${rangeSize(c)}`} />
+            <PinGlyph key={c} icon={MARK_ICONS[c]} color={MARKS[c].color} size={16} title={`${MARKS[c].name}: ${rangeSize(c)}×${rangeSize(c)} diamond`} />
           ))}
         </span>
       </label>

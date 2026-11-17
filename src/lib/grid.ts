@@ -138,14 +138,21 @@ export function diamondTiles(i: number, radius: number): number[] {
   return out;
 }
 
-/** Tiles of the (2·radius+1) × (2·radius+1) box of X and Y values around tile i (the game's 39×39 areas), cut at the map edge. */
-export function boxTiles(i: number, radius: number): number[] {
-  const c = i % COLS;
-  const r = (i - c) / COLS;
+/**
+ * Tiles of a T / C / X area around tile i (see AREA_STEPS in marks.ts): the (2·steps+1)-tile
+ * diamond without its 4 tip tiles, cut at the map edge.
+ */
+export function areaTiles(i: number, steps: number): number[] {
+  const p = TILE_ISO[i];
+  if (p === NO_ISO) return [];
+  const u = p % ISO_SIZE;
+  const v = (p - u) / ISO_SIZE;
   const out: number[] = [];
-  for (let rr = Math.max(0, r - radius); rr <= Math.min(ROWS - 1, r + radius); rr++) {
-    for (let cc = Math.max(0, c - radius); cc <= Math.min(COLS - 1, c + radius); cc++) {
-      if (((cc + rr) & 1) === 0) out.push(rr * COLS + cc);
+  for (let dv = -steps; dv <= steps; dv++) {
+    for (let du = -steps; du <= steps; du++) {
+      if (Math.abs(du) === steps && Math.abs(dv) === steps) continue; // tip
+      const j = fromIso(u + du, v + dv);
+      if (j >= 0) out.push(j);
     }
   }
   return out;
