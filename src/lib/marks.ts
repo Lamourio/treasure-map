@@ -26,25 +26,27 @@ export const PIN_CODES: number[] = [1, 5, 4];
 export const RANGE_CODES: number[] = [1, 5, 6];
 
 /**
- * The 39×39 area of a T, C or X tile, as measured in the game around 490:230: a diamond of every
- * tile with |ΔX| + |ΔY| <= 20 whose X and Y both stay within ±19, so it reaches 19 coordinates in
- * each direction (509:229, 491:211, 490:248 are in; the tips 490:210 and 490:250 are not). In game
- * tiles that is 21 × 21 along the diagonals without its 4 tip tiles: 437 tiles.
+ * The 39×39 area of a T, C or X tile, as measured in the game: a diamond of 20 × 20 game tiles.
+ * An even size has no middle tile, so the marked tile sits just below-right of the centre: the
+ * area reaches AREA_BACK tiles from it towards the top-left and top-right edges and AREA_FWD tiles
+ * towards the bottom ones (along the diagonals, (X+1, Y+1) and (X-1, Y+1)). Around 490:230 its
+ * corners are 490:210 (top), 509:229 (right), 490:248 (bottom) and 471:229 (left): X 471..509 and
+ * Y 210..248, 39 values each, 400 tiles.
  */
-export const RANGE_RADIUS = 19;
-/** The same area in diagonal steps (game tiles from the centre along each side): 10. */
-export const AREA_STEPS = (RANGE_RADIUS + 1) >> 1;
+export const AREA_BACK = 10;
+export const AREA_FWD = 9;
 
 /** True when a tile at offset (dx, dy) from a marked tile lies in its area. */
 export function inArea(dx: number, dy: number): boolean {
-  const ax = Math.abs(dx);
-  const ay = Math.abs(dy);
-  return ax <= RANGE_RADIUS && ay <= RANGE_RADIUS && ax + ay <= RANGE_RADIUS + 1;
+  if ((dx + dy) & 1) return false;
+  const da = (dx + dy) / 2; // steps along (X+1, Y+1)
+  const db = (dy - dx) / 2; // steps along (X-1, Y+1)
+  return da >= -AREA_BACK && da <= AREA_FWD && db >= -AREA_BACK && db <= AREA_FWD;
 }
 
 /** Width and height of a code's area in coordinates (39). */
 export function rangeSize(_code: number): number {
-  return 2 * RANGE_RADIUS + 1;
+  return 2 * (AREA_BACK + AREA_FWD) + 1;
 }
 
 export function isActiveMark(code: number): boolean {

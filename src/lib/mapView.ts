@@ -24,7 +24,7 @@ import {
   worldToIso,
 } from './grid';
 import { MARK_ICONS, PinIcon, drawIcon, readableOn } from './icons';
-import { AREA_STEPS, CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, isActiveMark } from './marks';
+import { AREA_BACK, AREA_FWD, CODE_SLOTS, MARKS, PIN_CODES, RANGE_CODES, isActiveMark } from './marks';
 import { typeIcon, type Store, type StoreEvent } from './store';
 import { LEVEL_COLORS, areaLabels, zoneArea, zoneLevel } from './zones';
 
@@ -892,31 +892,15 @@ export class MapView {
 
   private drawSuggestionBadges(list: Suggestion[]) {
     const { ctx, scale, ox, oy } = this;
-    // the 39×39 search around each suggestion: the area's diamond, traced along its tile edges in
-    // iso cells (a square of 2·steps+1 cells without its 4 corner cells)
-    const k = AREA_STEPS;
+    // the 39×39 search around each suggestion: the area's 20 × 20 diamond (a square in iso cells)
+    const side = AREA_BACK + AREA_FWD + 1;
     this.setIsoTransform();
     ctx.lineWidth = 2 * isoPx(scale);
     ctx.strokeStyle = SUGGEST_COLOR;
     ctx.setLineDash([6 * isoPx(scale), 4 * isoPx(scale)]);
     for (const s of list) {
       const [u, v] = isoOf(s.i);
-      const a0 = u - k, a1 = u + k + 1, b0 = v - k, b1 = v + k + 1;
-      ctx.beginPath();
-      ctx.moveTo(a0 + 1, b0);
-      ctx.lineTo(a1 - 1, b0);
-      ctx.lineTo(a1 - 1, b0 + 1);
-      ctx.lineTo(a1, b0 + 1);
-      ctx.lineTo(a1, b1 - 1);
-      ctx.lineTo(a1 - 1, b1 - 1);
-      ctx.lineTo(a1 - 1, b1);
-      ctx.lineTo(a0 + 1, b1);
-      ctx.lineTo(a0 + 1, b1 - 1);
-      ctx.lineTo(a0, b1 - 1);
-      ctx.lineTo(a0, b0 + 1);
-      ctx.lineTo(a0 + 1, b0 + 1);
-      ctx.closePath();
-      ctx.stroke();
+      ctx.strokeRect(u - AREA_BACK, v - AREA_BACK, side, side);
     }
     ctx.setLineDash([]);
     this.resetTransform();
@@ -1092,7 +1076,7 @@ export class MapView {
       const bit = 1 << k;
       for (const i of store.marked) {
         if (store.marks[i] !== code || !isTile(i)) continue;
-        for (const j of areaTiles(i, AREA_STEPS)) bits[TILE_ISO[j]] |= bit;
+        for (const j of areaTiles(i)) bits[TILE_ISO[j]] |= bit;
       }
     });
     const colors = RANGE_CODES.map((c) => packRgba(...hexToRgb(MARKS[c].color)));

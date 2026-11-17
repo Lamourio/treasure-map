@@ -1,4 +1,5 @@
 import { COLS, ROWS, TILE_COUNT, isTile } from './coords';
+import { AREA_BACK, AREA_FWD } from './marks';
 
 // Tile geometry, as in the game. Only X:Y with an even X + Y are tiles (see coords.ts). A tile is
 // a diamond 2 world units wide and 1 tall centred on (col + 0.5, row / 2 + 0.25): X runs straight
@@ -138,19 +139,15 @@ export function diamondTiles(i: number, radius: number): number[] {
   return out;
 }
 
-/**
- * Tiles of a T / C / X area around tile i (see AREA_STEPS in marks.ts): the (2·steps+1)-tile
- * diamond without its 4 tip tiles, cut at the map edge.
- */
-export function areaTiles(i: number, steps: number): number[] {
+/** Tiles of the T / C / X area around tile i (20 × 20 game tiles, see marks.ts), cut at the map edge. */
+export function areaTiles(i: number): number[] {
   const p = TILE_ISO[i];
   if (p === NO_ISO) return [];
   const u = p % ISO_SIZE;
   const v = (p - u) / ISO_SIZE;
   const out: number[] = [];
-  for (let dv = -steps; dv <= steps; dv++) {
-    for (let du = -steps; du <= steps; du++) {
-      if (Math.abs(du) === steps && Math.abs(dv) === steps) continue; // tip
+  for (let dv = -AREA_BACK; dv <= AREA_FWD; dv++) {
+    for (let du = -AREA_BACK; du <= AREA_FWD; du++) {
       const j = fromIso(u + du, v + dv);
       if (j >= 0) out.push(j);
     }
