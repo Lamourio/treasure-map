@@ -106,7 +106,7 @@ export function parseCoordList(text: string): { valid: { x: number; y: number }[
   return { valid, invalid };
 }
 
-/** Distance in tiles as the game's 39×39 areas count it: max(|ΔX|, |ΔY|). */
+/** Distance in tiles as the game's 37×37 areas count it: max(|ΔX|, |ΔY|). */
 export function chebyshev(a: number, b: number): number {
   return Math.max(Math.abs(indexX(a) - indexX(b)), Math.abs(indexY(a) - indexY(b)));
 }

@@ -6,7 +6,7 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 // "Where to search next" as a small probability model.
 //
 // Distances between finds are max(|ΔX|, |ΔY|): the spacing of the shared finds fits that better
-// than a diamond distance. Areas and searches are the game's 39×39 diamond (see marks.ts).
+// than a diamond distance. Areas and searches are the game's 37×37 diamond (see marks.ts).
 //
 // Finds keep away from each other: fitting simulated drops to the shared finds (107 of
 // 2026-11-07) gives a keep-away radius of about 33 tiles with a steep edge. A tile's weight for the
@@ -19,10 +19,10 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 // three values are fitted together on all levels (per-ruin chi-square, empty ruins, median and
 // 10th-percentile nearest-neighbour distance).
 //
-// A dug-empty tile (D) only rules out that tile; an empty-area mark (X) rules out its whole 39×39
+// A dug-empty tile (D) only rules out that tile; an empty-area mark (X) rules out its whole 37×37
 // area. Neither pushes drops away.
 //
-// Suggestions are 39×39 searches (the size of an X), picked greedily: each one covers the most
+// Suggestions are 37×37 searches (the size of an X), picked greedily: each one covers the most
 // chance not covered by the ones before it. With a level chosen, a search should stay inside that
 // level (tiles off the map are fine): each tile it spends on another level costs SPILL_COST of a
 // likely tile, and at most MAX_SPILL of it may spill. So a search only pushes over the border
@@ -35,7 +35,7 @@ import { areaLevel, zoneArea, zoneLevel } from './zones';
 export const FIND_CODES: number[] = [MARK_T, MARK_C];
 /** Dug, nothing there: only that tile is ruled out. */
 export const DUG_CODE = MARK_D;
-/** Searched 39×39 area with nothing in it: every tile of the area is ruled out. */
+/** Searched 37×37 area with nothing in it: every tile of the area is ruled out. */
 export const EMPTY_AREA_CODE = MARK_X;
 /** Fitted keep-away radius (tiles, max(|ΔX|, |ΔY|)) and sharpness of the weight curve. */
 export const KEEP_AWAY = 33;
@@ -52,7 +52,7 @@ const MAX_SPILL = 0.25;
 export const SUGGEST_COUNT = 5;
 
 export interface Suggestion {
-  /** Centre of the 39×39 search: mark it X if nothing turns up. */
+  /** Centre of the 37×37 search: mark it X if nothing turns up. */
   i: number;
   /** Share of the chance (within the chosen level) this search covers, 0..1, after the ones before it. */
   covers: number;
@@ -110,7 +110,7 @@ export function chebyshevTransform(dist: Int32Array) {
   }
 }
 
-// Sums over a search use the iso grid (see grid.ts), where an area is a square of 20 × 20 cells
+// Sums over a search use the iso grid (see grid.ts), where an area is a square of 19 × 19 cells
 // (AREA_BACK before the centre, AREA_FWD after), so a summed-area table gives each one in O(1).
 const N = ISO_SIZE;
 const B = AREA_BACK;
@@ -170,10 +170,10 @@ const WEIGHT = new Float64Array(256);
 for (let d = 0; d < 256; d++) WEIGHT[d] = 1 - Math.exp(-Math.pow(d / KEEP_AWAY, SHARPNESS));
 const weightAt = (d: number) => (d < 256 ? WEIGHT[d] : 1);
 
-/** Tiles in a full search (the area: 20 × 20 = 400). */
+/** Tiles in a full search (the area: 19 × 19 = 361). */
 const FULL = (B + F + 1) ** 2;
 
-/** The best 39×39 searches in one level (0 = any), in order, plus the weight map. */
+/** The best 37×37 searches in one level (0 = any), in order, plus the weight map. */
 export function computeSuggestions(marks: Uint8Array, marked: Iterable<number>, level: number, count = SUGGEST_COUNT): SuggestionResult {
   const heat = new Uint8Array(TILE_COUNT);
   // distance to the nearest find, max(|ΔX|, |ΔY|), on the X/Y grid

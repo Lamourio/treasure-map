@@ -892,7 +892,7 @@ export class MapView {
 
   private drawSuggestionBadges(list: Suggestion[]) {
     const { ctx, scale, ox, oy } = this;
-    // the 39×39 search around each suggestion: the area's 20 × 20 diamond (a square in iso cells)
+    // the 37×37 search around each suggestion: the area's 19 × 19 diamond (a square in iso cells)
     const side = AREA_BACK + AREA_FWD + 1;
     this.setIsoTransform();
     ctx.lineWidth = 2 * isoPx(scale);
@@ -1104,7 +1104,7 @@ export class MapView {
     this.rangeEdgeCtx.putImageData(this.rangeEdgeImg, 0, 0);
   }
 
-  /** 39×39 area (diamond, see marks.ts) around each T, C and X tile; overlapping areas merge into one outlined region. */
+  /** 37×37 area (diamond, see marks.ts) around each T, C and X tile; overlapping areas merge into one outlined region. */
   private drawRanges() {
     const { ctx, scale, store } = this;
     // rebuild only when treasure / scrap tiles changed, and not in the middle of a stroke

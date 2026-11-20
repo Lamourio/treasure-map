@@ -139,7 +139,7 @@ export function diamondTiles(i: number, radius: number): number[] {
   return out;
 }
 
-/** Tiles of the T / C / X area around tile i (20 × 20 game tiles, see marks.ts), cut at the map edge. */
+/** Tiles of the T / C / X area around tile i (19 × 19 game tiles, see marks.ts), cut at the map edge. */
 export function areaTiles(i: number): number[] {
   const p = TILE_ISO[i];
   if (p === NO_ISO) return [];

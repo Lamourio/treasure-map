@@ -26,14 +26,14 @@ export const PIN_CODES: number[] = [1, 5, 4];
 export const RANGE_CODES: number[] = [1, 5, 6];
 
 /**
- * The 39×39 area of a T, C or X tile, as measured in the game: a diamond of 20 × 20 game tiles.
- * An even size has no middle tile, so the marked tile sits just below-right of the centre: the
- * area reaches AREA_BACK tiles from it towards the top-left and top-right edges and AREA_FWD tiles
- * towards the bottom ones (along the diagonals, (X+1, Y+1) and (X-1, Y+1)). Around 490:230 its
- * corners are 490:210 (top), 509:229 (right), 490:248 (bottom) and 471:229 (left): X 471..509 and
- * Y 210..248, 39 values each, 400 tiles.
+ * The area of a T, C or X tile (and of a dig), as measured in the game: a diamond of 19 × 19 game
+ * tiles centred on the marked tile. It reaches AREA_BACK tiles from it towards the top-left and
+ * top-right edges and AREA_FWD tiles towards the bottom ones (along the diagonals, (X+1, Y+1) and
+ * (X-1, Y+1)). Digging at 185:887 covers up to the corners 185:869 (top), 203:887 (right),
+ * 185:905 (bottom) and 167:887 (left): X 167..203 and Y 869..905, 37 values each, 361 tiles.
+ * (An earlier reading near the map edge, around 490:230, suggested an off-centre 20 × 20.)
  */
-export const AREA_BACK = 10;
+export const AREA_BACK = 9;
 export const AREA_FWD = 9;
 
 /** True when a tile at offset (dx, dy) from a marked tile lies in its area. */
@@ -44,7 +44,7 @@ export function inArea(dx: number, dy: number): boolean {
   return da >= -AREA_BACK && da <= AREA_FWD && db >= -AREA_BACK && db <= AREA_FWD;
 }
 
-/** Width and height of a code's area in coordinates (39). */
+/** Width and height of a code's area in coordinates (37). */
 export function rangeSize(_code: number): number {
   return 2 * (AREA_BACK + AREA_FWD) + 1;
 }
@@ -66,7 +66,7 @@ export const MARKS: Record<number, MarkInfo> = {
   3: { letter: 'D', name: 'Dug, nothing here', color: '#7F7F7F', text: '#ffffff' },
   4: { letter: 'S', name: 'Suspected', color: '#FFFF00', text: '#1a1a1a' },
   5: { letter: 'C', name: 'Scrap', color: '#00B0F0', text: '#1a1a1a' },
-  6: { letter: 'X', name: 'Empty area (39×39)', color: '#6C5B9E', text: '#ffffff' },
+  6: { letter: 'X', name: 'Empty area (37×37)', color: '#6C5B9E', text: '#ffffff' },
 };
 
 export function markFromLetter(letter: string): MarkCode | null {

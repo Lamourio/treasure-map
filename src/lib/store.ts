@@ -32,9 +32,9 @@ export interface Settings {
   markLayers: MarkLayers;
   showZones: boolean;
   showPins: boolean; // pins + clusters for marks and landmarks when zoomed out
-  showRanges: boolean; // 39×39 square around each treasure and scrap tile
+  showRanges: boolean; // 37×37 square around each treasure and scrap tile
   showSuggestions: boolean; // heatmap of where the next drop can be
-  showSearchBoxes: boolean; // the suggested 39×39 searches with numbered badges
+  showSearchBoxes: boolean; // the suggested 37×37 searches with numbered badges
   suggestLevel: number; // zone level the suggestions are limited to (0 = any)
   brushSize: number; // brush radius in tiles: 0 = 1 tile, 1 = 3x3, 2 = 5x5, 4 = 9x9
   brushShape: 'brush' | 'box'; // freehand stamp, or drag a rectangle

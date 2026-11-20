@@ -46,7 +46,7 @@ export function DisplayOptions() {
           ))}
         </span>
       </label>
-      <label className="check" title="Show the 39×39 area around each treasure, scrap and empty-area tile, centred on it">
+      <label className="check" title="Show the 37×37 area around each treasure, scrap and empty-area tile, centred on it">
         <input type="checkbox" checked={showRanges} onChange={(e) => store.setSettings({ showRanges: e.target.checked })} />
         Mark areas
         <span className="pin-legend">
