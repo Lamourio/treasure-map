@@ -53,6 +53,14 @@ The build is fully static, and `base: './'` makes it work from any sub-path.
 - **Git-based:** "Add new site → Import an existing project", then pick the repository. [`netlify.toml`](netlify.toml) already sets `npm run build` and the `dist` folder.
 - **Drag and drop:** run `npm run build` and drop the `dist/` folder on <https://app.netlify.com/drop>.
 
+### Google Analytics
+
+The site sends page views to Google Analytics 4 when it is built with a measurement ID (`G-XXXXXXXXXX`) in `VITE_GA_ID`. It sends nothing without an ID, and nothing from `npm run dev`. Where to set it:
+
+- **GitHub Pages:** add a repository variable `GA_ID` (Settings → Secrets and variables → Actions → Variables). The deploy workflow passes it to the build.
+- **Netlify:** add the environment variable `VITE_GA_ID` (Site configuration → Environment variables), then redeploy.
+- **Local or drag-and-drop builds:** put `VITE_GA_ID=G-XXXXXXXXXX` in a `.env.production` file before `npm run build`.
+
 ## Publishing shared marks
 
 1. Mark the new finds in the app and click **Export JSON** (More tab). The export holds only your own marks.
